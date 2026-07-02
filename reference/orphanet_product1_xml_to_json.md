@@ -43,5 +43,5 @@ writeLines(c(
   '</Disorder></DisorderList></JDBOR>'
 ), xml)
 orphanet_product1_xml_to_json(xml, tempfile(fileext = ".json"))
-#> [1] "/tmp/RtmpMAvXlG/file19e477a846a4.json"
+#> [1] "/tmp/Rtmp7ZktCG/file199b3467604d.json"
 ```

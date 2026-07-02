@@ -37,6 +37,8 @@ fast_hpo_cr_ontology_urls()
 #> "https://github.com/obophenotype/human-phenotype-ontology/releases" 
 #>                                                           mondo_obo 
 #>                         "https://purl.obolibrary.org/obo/mondo.obo" 
+#>                                                      mondo_releases 
+#>              "https://github.com/monarch-initiative/mondo/releases" 
 #>                                               orphanet_product1_xml 
 #>                "https://www.orphadata.com/data/xml/en_product1.xml" 
 ```
