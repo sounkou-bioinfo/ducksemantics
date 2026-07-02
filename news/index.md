@@ -9,6 +9,6 @@
 - Added hybrid harness primitives for candidate tables, structured
   adjudication prompts, JSON parsing, provider/model run logs, and
   token/reasoning-token usage metadata.
-- Added an opt-in real-HPO README stress test and `index-real-hpo` /
-  `rdm-real-hpo` Make targets for the context-heavy clinical note
-  harness.
+- Added a real-HPO README stress test with a live `piknit` / Pi
+  adjudication call plus an `index-real-hpo` Make target for cached
+  full-HPO indexing.

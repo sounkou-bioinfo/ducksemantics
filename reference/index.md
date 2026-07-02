@@ -75,6 +75,8 @@ Build FastHPOCR indexes from ontology source files.
 
 - [`hpo_index_config()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_index_config.md)
   : Build a FastHPOCR index configuration list
+- [`hpo_real_index()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_real_index.md)
+  : Download and build a cached full HPO FastHPOCR index
 - [`index_hpo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_hpo.md)
   : Build a FastHPOCR HPO index
 - [`index_mondo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_mondo.md)

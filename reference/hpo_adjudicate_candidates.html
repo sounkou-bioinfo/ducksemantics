@@ -176,8 +176,8 @@ adjudication table: <code>decision</code>, <code>evidence_span</code>, and <code
 <span class="r-in"><span>  <span class="op">)</span>,</span></span>
 <span class="r-in"><span>  auto_unbox <span class="op">=</span> <span class="cn">TRUE</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">mock_runner</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">prompt</span><span class="op">)</span> <span class="va">json</span></span></span>
-<span class="r-in"><span><span class="fu">hpo_adjudicate_candidates</span><span class="op">(</span><span class="st">"No seizures were reported."</span>, <span class="va">candidates</span>, <span class="va">mock_runner</span><span class="op">)</span><span class="op">$</span><span class="va">adjudication</span></span></span>
+<span class="r-in"><span><span class="va">fixture_runner</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">prompt</span><span class="op">)</span> <span class="va">json</span></span></span>
+<span class="r-in"><span><span class="fu">hpo_adjudicate_candidates</span><span class="op">(</span><span class="st">"No seizures were reported."</span>, <span class="va">candidates</span>, <span class="va">fixture_runner</span><span class="op">)</span><span class="op">$</span><span class="va">adjudication</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   case_id candidate_id candidate_span normalized_phrase     hpo_id hpo_label</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1  case-1  case-1:0001       seizures          seizures HP:0001250   Seizure</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   decision support_type patient_context evidence_span</span>

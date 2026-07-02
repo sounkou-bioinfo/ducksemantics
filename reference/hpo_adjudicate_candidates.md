@@ -137,8 +137,8 @@ json <- jsonlite::toJSON(
   ),
   auto_unbox = TRUE
 )
-mock_runner <- function(prompt) json
-hpo_adjudicate_candidates("No seizures were reported.", candidates, mock_runner)$adjudication
+fixture_runner <- function(prompt) json
+hpo_adjudicate_candidates("No seizures were reported.", candidates, fixture_runner)$adjudication
 #>   case_id candidate_id candidate_span normalized_phrase     hpo_id hpo_label
 #> 1  case-1  case-1:0001       seizures          seizures HP:0001250   Seizure
 #>   decision support_type patient_context evidence_span
