@@ -13,9 +13,16 @@
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_ontology_urls.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_python_packages.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_use_env.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudicate_candidates.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_prompt.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_schema.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_annotate.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_annotator.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_candidate_table.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_extract_candidates.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_harness_modes.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_index_config.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_parse_adjudication.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_hpo.html</loc></url>

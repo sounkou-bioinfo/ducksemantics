@@ -253,14 +253,431 @@
 <p>In that design this package owns the deterministic FastHPOCR lane: text in, candidate HPO rows out, with provenance and offsets preserved.</p>
 </div>
 <div class="section level2">
+<h2 id="hybrid-adjudication-harness-primitives">Hybrid adjudication harness primitives<a class="anchor" aria-label="anchor" href="#hybrid-adjudication-harness-primitives"></a>
+</h2>
+<p>The package now also provides the small, model-agnostic pieces needed to compare hybrid configurations without making <code>RfastHPOCR</code> depend on any one LLM provider. The main practical arm is:</p>
+<pre class="text"><code>note + FastHPOCR candidates -&gt; model keep/drop adjudication</code></pre>
+<p>FastHPOCR still generates deterministic candidates. The model is asked only for short auditable fields: <code>decision</code>, <code>evidence_span</code>, and <code>short_reason</code>. Reasoning-token counts, when a provider exposes them, are stored only as run metadata.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">review_text</span> <span class="op">&lt;-</span> <span class="st">"Short stature was noted. No seizures were reported."</span></span>
+<span><span class="va">review_hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">ann_all</span>, <span class="va">review_text</span>, longest_match <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">review_candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_candidate_table.html">hpo_candidate_table</a></span><span class="op">(</span><span class="va">review_hits</span>, case_id <span class="op">=</span> <span class="st">"readme-case-001"</span><span class="op">)</span></span>
+<span><span class="va">review_candidates</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"candidate_id"</span>, <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"hpo_label"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;           case_id         candidate_id candidate_span     hpo_id     hpo_label</span></span>
+<span><span class="co">#&gt; 1 readme-case-001 readme-case-001:0001  Short stature HP:0004322 Short stature</span></span>
+<span><span class="co">#&gt; 2 readme-case-001 readme-case-001:0002       seizures HP:0001250      seizures</span></span></code></pre></div>
+<p>The harness modes are explicit so that <code>tool_only</code>, <code>model_only</code>, and hybrid arms can be compared with the same term-level schema.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="reference/hpo_harness_modes.html">hpo_harness_modes</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"question"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;                           mode</span></span>
+<span><span class="co">#&gt; 1                    tool_only</span></span>
+<span><span class="co">#&gt; 2                   model_only</span></span>
+<span><span class="co">#&gt; 3            model_tools_model</span></span>
+<span><span class="co">#&gt; 4 model_candidates_tools_model</span></span>
+<span><span class="co">#&gt; 5             candidates_model</span></span>
+<span><span class="co">#&gt; 6       candidates_tools_model</span></span>
+<span><span class="co">#&gt;                                                                  question</span></span>
+<span><span class="co">#&gt; 1                              What is the deterministic FastHPOCR floor?</span></span>
+<span><span class="co">#&gt; 2              Can the model extract and map HPO terms without grounding?</span></span>
+<span><span class="co">#&gt; 3                       Does ontology grounding fix model mapping errors?</span></span>
+<span><span class="co">#&gt; 4 Does model-generated candidate expansion plus grounding improve recall?</span></span>
+<span><span class="co">#&gt; 5                 Does model cleanup fix FastHPOCR context noise cheaply?</span></span>
+<span><span class="co">#&gt; 6 Does ontology validation after candidate generation add useful hygiene?</span></span></code></pre></div>
+<p>The prompt embeds the candidate rows and a strict JSON schema. The README prints only the beginning of the prompt to keep the rendered document short.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">prompt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_adjudication_prompt.html">hpo_adjudication_prompt</a></span><span class="op">(</span><span class="va">review_text</span>, <span class="va">review_candidates</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/strsplit.html" class="external-link">strsplit</a></span><span class="op">(</span><span class="va">prompt</span>, <span class="st">"\n"</span>, fixed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="fl">16</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">"\n"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; You are adjudicating candidate Human Phenotype Ontology (HPO) extractions from de-identified clinical text.</span></span>
+<span><span class="co">#&gt; Return only valid JSON matching the schema. Do not include markdown fences or explanatory prose outside JSON.</span></span>
+<span><span class="co">#&gt; Do not provide hidden chain-of-thought. The clinical audit fields are decision, evidence_span, and short_reason.</span></span>
+<span><span class="co">#&gt; Reasoning-token counts, if available from the API, are run metadata and are not a clinical audit field.</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Prompt version: rfasthpocr-candidates-model-v1</span></span>
+<span><span class="co">#&gt; Case id: readme-case-001</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Decision rules:</span></span>
+<span><span class="co">#&gt; - Return exactly one decision for each supplied candidate_id.</span></span>
+<span><span class="co">#&gt; - decision = 'keep' only if the phenotype is present for the patient in the note.</span></span>
+<span><span class="co">#&gt; - decision = 'drop' if the mention is negated, family-history-only, uncertain/not established, not about the patient, too generic, duplicated by a more specific kept candidate, or unsupported.</span></span>
+<span><span class="co">#&gt; - patient_context must be one of: patient, family_history, negated, uncertain.</span></span>
+<span><span class="co">#&gt; - evidence_span should be the shortest exact quote from the note that supports the decision, including negation or family-history wording when relevant.</span></span>
+<span><span class="co">#&gt; - short_reason should be one concise sentence; do not include chain-of-thought.</span></span>
+<span><span class="co">#&gt; - If the supplied HPO term is wrong but a better HPO term is obvious from the same evidence, keep decision='drop' and fill replacement_hpo_id/replacement_hpo_label.</span></span></code></pre></div>
+<p>A model response is expected to be JSON. This mocked response demonstrates the clinical audit shape: keep direct patient findings and drop negated findings with an evidence quote and a short reason.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">mock_response</span> <span class="op">&lt;-</span> <span class="fu">jsonlite</span><span class="fu">::</span><span class="fu"><a href="https://jeroen.r-universe.dev/jsonlite/reference/fromJSON.html" class="external-link">toJSON</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
+<span>    decisions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        candidate_id <span class="op">=</span> <span class="st">"readme-case-001:0001"</span>,</span>
+<span>        candidate_span <span class="op">=</span> <span class="st">"Short stature"</span>,</span>
+<span>        normalized_phrase <span class="op">=</span> <span class="st">"Short stature"</span>,</span>
+<span>        hpo_id <span class="op">=</span> <span class="st">"HP:0004322"</span>,</span>
+<span>        hpo_label <span class="op">=</span> <span class="st">"Short stature"</span>,</span>
+<span>        decision <span class="op">=</span> <span class="st">"keep"</span>,</span>
+<span>        support_type <span class="op">=</span> <span class="st">"direct"</span>,</span>
+<span>        patient_context <span class="op">=</span> <span class="st">"patient"</span>,</span>
+<span>        evidence_span <span class="op">=</span> <span class="st">"Short stature was noted"</span>,</span>
+<span>        short_reason <span class="op">=</span> <span class="st">"The phenotype is directly stated for the patient."</span>,</span>
+<span>        replacement_hpo_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>        replacement_hpo_label <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>        confidence <span class="op">=</span> <span class="fl">0.95</span></span>
+<span>      <span class="op">)</span>,</span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>        candidate_id <span class="op">=</span> <span class="st">"readme-case-001:0002"</span>,</span>
+<span>        candidate_span <span class="op">=</span> <span class="st">"seizures"</span>,</span>
+<span>        normalized_phrase <span class="op">=</span> <span class="st">"seizures"</span>,</span>
+<span>        hpo_id <span class="op">=</span> <span class="st">"HP:0001250"</span>,</span>
+<span>        hpo_label <span class="op">=</span> <span class="st">"Seizure"</span>,</span>
+<span>        decision <span class="op">=</span> <span class="st">"drop"</span>,</span>
+<span>        support_type <span class="op">=</span> <span class="st">"none"</span>,</span>
+<span>        patient_context <span class="op">=</span> <span class="st">"negated"</span>,</span>
+<span>        evidence_span <span class="op">=</span> <span class="st">"No seizures were reported"</span>,</span>
+<span>        short_reason <span class="op">=</span> <span class="st">"The note explicitly negates seizures."</span>,</span>
+<span>        replacement_hpo_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>        replacement_hpo_label <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>        confidence <span class="op">=</span> <span class="fl">0.99</span></span>
+<span>      <span class="op">)</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  auto_unbox <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  null <span class="op">=</span> <span class="st">"null"</span>,</span>
+<span>  pretty <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">adjudicated</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_parse_adjudication.html">hpo_parse_adjudication</a></span><span class="op">(</span><span class="va">mock_response</span>, candidates <span class="op">=</span> <span class="va">review_candidates</span><span class="op">)</span></span>
+<span><span class="va">adjudicated</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"decision"</span>, <span class="st">"patient_context"</span>,</span>
+<span>  <span class="st">"evidence_span"</span>, <span class="st">"short_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;   candidate_span     hpo_id decision patient_context             evidence_span</span></span>
+<span><span class="co">#&gt; 1  Short stature HP:0004322     keep         patient   Short stature was noted</span></span>
+<span><span class="co">#&gt; 2       seizures HP:0001250     drop         negated No seizures were reported</span></span>
+<span><span class="co">#&gt;                                        short_reason</span></span>
+<span><span class="co">#&gt; 1 The phenotype is directly stated for the patient.</span></span>
+<span><span class="co">#&gt; 2             The note explicitly negates seizures.</span></span></code></pre></div>
+<p><code><a href="reference/hpo_adjudicate_candidates.html">hpo_adjudicate_candidates()</a></code> accepts any model runner function. In a real pipeline the runner can call <code>piknit::pi_run()</code>, Ollama, vLLM, LM Studio, or a remote API. The run log captures provider/model metadata, token usage, latency, parse success, and reasoning-token counts when available.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">mock_runner</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">prompt</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">out</span> <span class="op">&lt;-</span> <span class="va">mock_response</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">out</span>, <span class="st">"usage"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    input_tokens <span class="op">=</span> <span class="fl">500L</span>,</span>
+<span>    output_tokens <span class="op">=</span> <span class="fl">160L</span>,</span>
+<span>    total_tokens <span class="op">=</span> <span class="fl">660L</span>,</span>
+<span>    reasoning_tokens <span class="op">=</span> <span class="fl">0L</span>,</span>
+<span>    tool_call_count <span class="op">=</span> <span class="fl">0L</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="va">out</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">run</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_adjudicate_candidates.html">hpo_adjudicate_candidates</a></span><span class="op">(</span></span>
+<span>  <span class="va">review_text</span>,</span>
+<span>  <span class="va">review_candidates</span>,</span>
+<span>  runner <span class="op">=</span> <span class="va">mock_runner</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"mock-provider"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"mock-small-model"</span>,</span>
+<span>  run_id <span class="op">=</span> <span class="st">"readme-run-001"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">run</span><span class="op">$</span><span class="va">run_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"provider"</span>, <span class="st">"model"</span>, <span class="st">"mode"</span>, <span class="st">"input_tokens"</span>, <span class="st">"output_tokens"</span>,</span>
+<span>  <span class="st">"reasoning_tokens"</span>, <span class="st">"latency_seconds"</span>, <span class="st">"parse_success"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;        provider            model             mode input_tokens output_tokens</span></span>
+<span><span class="co">#&gt; 1 mock-provider mock-small-model candidates_model          500           160</span></span>
+<span><span class="co">#&gt;   reasoning_tokens latency_seconds parse_success</span></span>
+<span><span class="co">#&gt; 1                0    1.525879e-05          TRUE</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="optional-real-hpo-clinical-stress-test">Optional real-HPO clinical stress test<a class="anchor" aria-label="anchor" href="#optional-real-hpo-clinical-stress-test"></a>
+</h2>
+<p>The tiny ontology above keeps the ordinary README fast and deterministic. For a real HPO smoke test, set <code>RFASTHPOCR_README_REAL_HPO=true</code> or run <code>make rdm-real-hpo</code>. That path downloads the real <code>hp.obo</code>, builds a real FastHPOCR HPO index under <code>RFASTHPOCR_REAL_HPO_DIR</code> or a user cache directory, and runs a context-heavy clinical note through the same harness primitives.</p>
+<p>This is intentionally opt-in because a full HPO index is large and can take several minutes to build, but the code below is real executable README code, not pseudo-code.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">real_hpo_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span></span>
+<span>  <span class="st">"RFASTHPOCR_REAL_HPO_DIR"</span>,</span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu">tools</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/tools/userdir.html" class="external-link">R_user_dir</a></span><span class="op">(</span><span class="st">"RfastHPOCR"</span>, <span class="st">"cache"</span><span class="op">)</span>, <span class="st">"real-hpo"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">real_hpo_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">real_hp_obo</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">real_hpo_dir</span>, <span class="st">"hp.obo"</span><span class="op">)</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">real_hp_obo</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">real_hp_obo</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/download_hpo_obo.html">download_hpo_obo</a></span><span class="op">(</span><span class="va">real_hpo_dir</span>, quiet <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">real_index_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">real_hpo_dir</span>, <span class="st">"index"</span><span class="op">)</span></span>
+<span><span class="va">real_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">real_index_dir</span>, <span class="st">"hp.index"</span><span class="op">)</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">real_index_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>  <span class="va">real_index_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">real_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
+<span>      <span class="va">real_hp_obo</span>,</span>
+<span>      <span class="va">real_index_dir</span>,</span>
+<span>      root_concepts <span class="op">=</span> <span class="st">"HP:0000118"</span>,</span>
+<span>      include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>      compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="va">real_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/normalizePath.html" class="external-link">normalizePath</a></span><span class="op">(</span><span class="va">real_index</span>, mustWork <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="va">real_index_log</span> <span class="op">&lt;-</span> <span class="st">"Using cached real HPO index."</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  hp_obo <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="va">real_hp_obo</span><span class="op">)</span>,</span>
+<span>  hpo_index <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span>,</span>
+<span>  index_size_mb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.info.html" class="external-link">file.info</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span><span class="op">$</span><span class="va">size</span> <span class="op">/</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span>, <span class="fl">1</span><span class="op">)</span>,</span>
+<span>  stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;   hp_obo hpo_index index_size_mb</span></span>
+<span><span class="co">#&gt; 1 hp.obo  hp.index         132.7</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">stress_note</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
+<span>  <span class="st">"The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect."</span>,</span>
+<span>  <span class="st">"He has no seizures, no hypotonia, no ataxia, and no hearing loss. There is no short stature and no microcephaly."</span>,</span>
+<span>  <span class="st">"Family history is notable for a brother with thrombocytosis and autism and a maternal aunt with cardiomyopathy. These findings are not present in the proband."</span>,</span>
+<span>  <span class="st">"Earlier notes described the child as floppy in infancy and not talking yet at 3 years of age. Teachers report that he learns slowly. Parents also describe occasional staring spells."</span>,</span>
+<span>  sep <span class="op">=</span> <span class="st">"\n\n"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">real_ann</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span></span>
+<span><span class="va">stress_hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">real_ann</span>, <span class="va">stress_note</span>, longest_match <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">stress_candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_candidate_table.html">hpo_candidate_table</a></span><span class="op">(</span></span>
+<span>  <span class="va">stress_hits</span>,</span>
+<span>  case_id <span class="op">=</span> <span class="st">"hpo-stress-001"</span>,</span>
+<span>  source <span class="op">=</span> <span class="st">"FastHPOCR-real-HPO"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">stress_candidates</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"hpo_label"</span>, <span class="st">"start_offset"</span>, <span class="st">"end_offset"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;                candidate_span     hpo_id                   hpo_label</span></span>
+<span><span class="co">#&gt; 1  global developmental delay HP:0001263 Developmental delay, global</span></span>
+<span><span class="co">#&gt; 2    autism spectrum disorder HP:0000729    Autism spectrum disorder</span></span>
+<span><span class="co">#&gt; 3                      autism HP:0000717                      Autism</span></span>
+<span><span class="co">#&gt; 4     intellectual disability HP:0001249     Intellectual disability</span></span>
+<span><span class="co">#&gt; 5               brachydactyly HP:0001156               Brachydactyly</span></span>
+<span><span class="co">#&gt; 6        hypomelanotic macule HP:0009719       Hypomelanotic macules</span></span>
+<span><span class="co">#&gt; 7         café-au-lait macule HP:0000957        Cafe-au-lait macules</span></span>
+<span><span class="co">#&gt; 8              cardiomyopathy HP:0001638              Cardiomyopathy</span></span>
+<span><span class="co">#&gt; 9              cardiomyopathy HP:0001638              Cardiomyopathy</span></span>
+<span><span class="co">#&gt; 10      septal cardiac defect HP:0001671         Heart septal defect</span></span>
+<span><span class="co">#&gt; 11                   seizures HP:0001250                     Seizure</span></span>
+<span><span class="co">#&gt; 12                  hypotonia HP:0001252                   Hypotonia</span></span>
+<span><span class="co">#&gt; 13                     ataxia HP:0001251                      Ataxia</span></span>
+<span><span class="co">#&gt; 14               hearing loss HP:0000365                Hearing loss</span></span>
+<span><span class="co">#&gt; 15              short stature HP:0004322               Short stature</span></span>
+<span><span class="co">#&gt; 16               microcephaly HP:0000252                Microcephaly</span></span>
+<span><span class="co">#&gt; 17             thrombocytosis HP:0001894              Thrombocytosis</span></span>
+<span><span class="co">#&gt;    start_offset end_offset</span></span>
+<span><span class="co">#&gt; 1            73         99</span></span>
+<span><span class="co">#&gt; 2           101        125</span></span>
+<span><span class="co">#&gt; 3           492        498</span></span>
+<span><span class="co">#&gt; 4           127        150</span></span>
+<span><span class="co">#&gt; 5           152        165</span></span>
+<span><span class="co">#&gt; 6           171        191</span></span>
+<span><span class="co">#&gt; 7           214        233</span></span>
+<span><span class="co">#&gt; 8           269        283</span></span>
+<span><span class="co">#&gt; 9           524        538</span></span>
+<span><span class="co">#&gt; 10          290        311</span></span>
+<span><span class="co">#&gt; 11          324        332</span></span>
+<span><span class="co">#&gt; 12          337        346</span></span>
+<span><span class="co">#&gt; 13          351        357</span></span>
+<span><span class="co">#&gt; 14          366        378</span></span>
+<span><span class="co">#&gt; 15          392        405</span></span>
+<span><span class="co">#&gt; 16          413        425</span></span>
+<span><span class="co">#&gt; 17          473        487</span></span></code></pre></div>
+<p>The real HPO candidate layer deliberately captures both true proband findings and context traps: negated terms, family-history terms, and duplicate mentions. That is exactly why the model layer should produce explicit keep/drop decisions with an evidence quote.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">negated_ids</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"HP:0001250"</span>, <span class="co"># seizures</span></span>
+<span>  <span class="st">"HP:0001252"</span>, <span class="co"># hypotonia</span></span>
+<span>  <span class="st">"HP:0001251"</span>, <span class="co"># ataxia</span></span>
+<span>  <span class="st">"HP:0000365"</span>, <span class="co"># hearing loss</span></span>
+<span>  <span class="st">"HP:0004322"</span>, <span class="co"># short stature</span></span>
+<span>  <span class="st">"HP:0000252"</span>  <span class="co"># microcephaly</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">negated_evidence</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"HP:0001250"</span> <span class="op">=</span> <span class="st">"no seizures"</span>,</span>
+<span>  <span class="st">"HP:0001252"</span> <span class="op">=</span> <span class="st">"no hypotonia"</span>,</span>
+<span>  <span class="st">"HP:0001251"</span> <span class="op">=</span> <span class="st">"no ataxia"</span>,</span>
+<span>  <span class="st">"HP:0000365"</span> <span class="op">=</span> <span class="st">"no hearing loss"</span>,</span>
+<span>  <span class="st">"HP:0004322"</span> <span class="op">=</span> <span class="st">"no short stature"</span>,</span>
+<span>  <span class="st">"HP:0000252"</span> <span class="op">=</span> <span class="st">"no microcephaly"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">stress_decision</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">candidate</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">hpo_id</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">hpo_id</span><span class="op">)</span></span>
+<span>  <span class="va">start</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">start_offset</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">hpo_id</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">negated_ids</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      candidate_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_id</span><span class="op">)</span>,</span>
+<span>      candidate_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_span</span><span class="op">)</span>,</span>
+<span>      normalized_phrase <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">normalized_phrase</span><span class="op">)</span>,</span>
+<span>      hpo_id <span class="op">=</span> <span class="va">hpo_id</span>,</span>
+<span>      hpo_label <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">hpo_label</span><span class="op">)</span>,</span>
+<span>      decision <span class="op">=</span> <span class="st">"drop"</span>,</span>
+<span>      support_type <span class="op">=</span> <span class="st">"none"</span>,</span>
+<span>      patient_context <span class="op">=</span> <span class="st">"negated"</span>,</span>
+<span>      evidence_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="va">negated_evidence</span><span class="op">[[</span><span class="va">hpo_id</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>      short_reason <span class="op">=</span> <span class="st">"The note explicitly negates this phenotype for the proband."</span>,</span>
+<span>      replacement_hpo_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>      replacement_hpo_label <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>      confidence <span class="op">=</span> <span class="fl">1</span></span>
+<span>    <span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="va">family_history</span> <span class="op">&lt;-</span> <span class="va">hpo_id</span> <span class="op">==</span> <span class="st">"HP:0001894"</span> <span class="op">||</span></span>
+<span>    <span class="op">(</span><span class="va">hpo_id</span> <span class="op">==</span> <span class="st">"HP:0000717"</span> <span class="op">&amp;&amp;</span> <span class="va">start</span> <span class="op">&gt;</span> <span class="fl">450L</span><span class="op">)</span> <span class="op">||</span></span>
+<span>    <span class="op">(</span><span class="va">hpo_id</span> <span class="op">==</span> <span class="st">"HP:0001638"</span> <span class="op">&amp;&amp;</span> <span class="va">start</span> <span class="op">&gt;</span> <span class="fl">450L</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">if</span> <span class="op">(</span><span class="va">family_history</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">evidence</span> <span class="op">&lt;-</span> <span class="kw">if</span> <span class="op">(</span><span class="va">hpo_id</span> <span class="op">==</span> <span class="st">"HP:0001894"</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="st">"brother with thrombocytosis"</span></span>
+<span>    <span class="op">}</span> <span class="kw">else</span> <span class="kw">if</span> <span class="op">(</span><span class="va">hpo_id</span> <span class="op">==</span> <span class="st">"HP:0000717"</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="st">"brother with thrombocytosis and autism"</span></span>
+<span>    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>      <span class="st">"maternal aunt with cardiomyopathy"</span></span>
+<span>    <span class="op">}</span></span>
+<span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>      candidate_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_id</span><span class="op">)</span>,</span>
+<span>      candidate_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_span</span><span class="op">)</span>,</span>
+<span>      normalized_phrase <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">normalized_phrase</span><span class="op">)</span>,</span>
+<span>      hpo_id <span class="op">=</span> <span class="va">hpo_id</span>,</span>
+<span>      hpo_label <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">hpo_label</span><span class="op">)</span>,</span>
+<span>      decision <span class="op">=</span> <span class="st">"drop"</span>,</span>
+<span>      support_type <span class="op">=</span> <span class="st">"none"</span>,</span>
+<span>      patient_context <span class="op">=</span> <span class="st">"family_history"</span>,</span>
+<span>      evidence_span <span class="op">=</span> <span class="va">evidence</span>,</span>
+<span>      short_reason <span class="op">=</span> <span class="st">"The evidence is family history and is stated not to be present in the proband."</span>,</span>
+<span>      replacement_hpo_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>      replacement_hpo_label <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>      confidence <span class="op">=</span> <span class="fl">1</span></span>
+<span>    <span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    candidate_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_id</span><span class="op">)</span>,</span>
+<span>    candidate_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_span</span><span class="op">)</span>,</span>
+<span>    normalized_phrase <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">normalized_phrase</span><span class="op">)</span>,</span>
+<span>    hpo_id <span class="op">=</span> <span class="va">hpo_id</span>,</span>
+<span>    hpo_label <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">hpo_label</span><span class="op">)</span>,</span>
+<span>    decision <span class="op">=</span> <span class="st">"keep"</span>,</span>
+<span>    support_type <span class="op">=</span> <span class="st">"direct"</span>,</span>
+<span>    patient_context <span class="op">=</span> <span class="st">"patient"</span>,</span>
+<span>    evidence_span <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">candidate</span><span class="op">$</span><span class="va">candidate_span</span><span class="op">)</span>,</span>
+<span>    short_reason <span class="op">=</span> <span class="st">"The phenotype is directly stated for the proband."</span>,</span>
+<span>    replacement_hpo_id <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>    replacement_hpo_label <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>    confidence <span class="op">=</span> <span class="fl">0.95</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">stress_response</span> <span class="op">&lt;-</span> <span class="fu">jsonlite</span><span class="fu">::</span><span class="fu"><a href="https://jeroen.r-universe.dev/jsonlite/reference/fromJSON.html" class="external-link">toJSON</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    case_id <span class="op">=</span> <span class="st">"hpo-stress-001"</span>,</span>
+<span>    decisions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">stress_candidates</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="op">{</span></span>
+<span>      <span class="fu">stress_decision</span><span class="op">(</span><span class="va">stress_candidates</span><span class="op">[</span><span class="va">i</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span><span class="op">)</span></span>
+<span>    <span class="op">}</span><span class="op">)</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  auto_unbox <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  null <span class="op">=</span> <span class="st">"null"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">stress_runner</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">prompt</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">out</span> <span class="op">&lt;-</span> <span class="va">stress_response</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">out</span>, <span class="st">"usage"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    input_tokens <span class="op">=</span> <span class="cn">NA_integer_</span>,</span>
+<span>    output_tokens <span class="op">=</span> <span class="cn">NA_integer_</span>,</span>
+<span>    total_tokens <span class="op">=</span> <span class="cn">NA_integer_</span>,</span>
+<span>    reasoning_tokens <span class="op">=</span> <span class="cn">NA_integer_</span>,</span>
+<span>    tool_call_count <span class="op">=</span> <span class="fl">0L</span></span>
+<span>  <span class="op">)</span></span>
+<span>  <span class="va">out</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="va">stress_run</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_adjudicate_candidates.html">hpo_adjudicate_candidates</a></span><span class="op">(</span></span>
+<span>  <span class="va">stress_note</span>,</span>
+<span>  <span class="va">stress_candidates</span>,</span>
+<span>  runner <span class="op">=</span> <span class="va">stress_runner</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"expected-output"</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"manual-stress-adjudicator"</span>,</span>
+<span>  run_id <span class="op">=</span> <span class="st">"hpo-stress-readme"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">stress_run</span><span class="op">$</span><span class="va">adjudication</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"decision"</span>, <span class="st">"patient_context"</span>,</span>
+<span>  <span class="st">"evidence_span"</span>, <span class="st">"short_reason"</span></span>
+<span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;                candidate_span     hpo_id decision patient_context</span></span>
+<span><span class="co">#&gt; 1  global developmental delay HP:0001263     keep         patient</span></span>
+<span><span class="co">#&gt; 2    autism spectrum disorder HP:0000729     keep         patient</span></span>
+<span><span class="co">#&gt; 3                      autism HP:0000717     drop  family_history</span></span>
+<span><span class="co">#&gt; 4     intellectual disability HP:0001249     keep         patient</span></span>
+<span><span class="co">#&gt; 5               brachydactyly HP:0001156     keep         patient</span></span>
+<span><span class="co">#&gt; 6        hypomelanotic macule HP:0009719     keep         patient</span></span>
+<span><span class="co">#&gt; 7         café-au-lait macule HP:0000957     keep         patient</span></span>
+<span><span class="co">#&gt; 8              cardiomyopathy HP:0001638     keep         patient</span></span>
+<span><span class="co">#&gt; 9              cardiomyopathy HP:0001638     drop  family_history</span></span>
+<span><span class="co">#&gt; 10      septal cardiac defect HP:0001671     keep         patient</span></span>
+<span><span class="co">#&gt; 11                   seizures HP:0001250     drop         negated</span></span>
+<span><span class="co">#&gt; 12                  hypotonia HP:0001252     drop         negated</span></span>
+<span><span class="co">#&gt; 13                     ataxia HP:0001251     drop         negated</span></span>
+<span><span class="co">#&gt; 14               hearing loss HP:0000365     drop         negated</span></span>
+<span><span class="co">#&gt; 15              short stature HP:0004322     drop         negated</span></span>
+<span><span class="co">#&gt; 16               microcephaly HP:0000252     drop         negated</span></span>
+<span><span class="co">#&gt; 17             thrombocytosis HP:0001894     drop  family_history</span></span>
+<span><span class="co">#&gt;                             evidence_span</span></span>
+<span><span class="co">#&gt; 1              global developmental delay</span></span>
+<span><span class="co">#&gt; 2                autism spectrum disorder</span></span>
+<span><span class="co">#&gt; 3  brother with thrombocytosis and autism</span></span>
+<span><span class="co">#&gt; 4                 intellectual disability</span></span>
+<span><span class="co">#&gt; 5                           brachydactyly</span></span>
+<span><span class="co">#&gt; 6                    hypomelanotic macule</span></span>
+<span><span class="co">#&gt; 7                     café-au-lait macule</span></span>
+<span><span class="co">#&gt; 8                          cardiomyopathy</span></span>
+<span><span class="co">#&gt; 9       maternal aunt with cardiomyopathy</span></span>
+<span><span class="co">#&gt; 10                  septal cardiac defect</span></span>
+<span><span class="co">#&gt; 11                            no seizures</span></span>
+<span><span class="co">#&gt; 12                           no hypotonia</span></span>
+<span><span class="co">#&gt; 13                              no ataxia</span></span>
+<span><span class="co">#&gt; 14                        no hearing loss</span></span>
+<span><span class="co">#&gt; 15                       no short stature</span></span>
+<span><span class="co">#&gt; 16                        no microcephaly</span></span>
+<span><span class="co">#&gt; 17            brother with thrombocytosis</span></span>
+<span><span class="co">#&gt;                                                                      short_reason</span></span>
+<span><span class="co">#&gt; 1                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 2                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 3  The evidence is family history and is stated not to be present in the proband.</span></span>
+<span><span class="co">#&gt; 4                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 5                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 6                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 7                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 8                               The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 9  The evidence is family history and is stated not to be present in the proband.</span></span>
+<span><span class="co">#&gt; 10                              The phenotype is directly stated for the proband.</span></span>
+<span><span class="co">#&gt; 11                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 12                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 13                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 14                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 15                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 16                    The note explicitly negates this phenotype for the proband.</span></span>
+<span><span class="co">#&gt; 17 The evidence is family history and is stated not to be present in the proband.</span></span></code></pre></div>
+<p>The optional real-HPO test also shows the boundary between the deterministic candidate layer and the model-expansion arms: phrases such as “floppy in infancy”, “not talking yet”, “learns slowly”, and “staring spells” may require <code>model_only</code> or <code>model_candidates_tools_model</code> runs if we want inferred or paraphrased phenotype recovery.</p>
+</div>
+<div class="section level2">
 <h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h2>
 <p>This package follows the same lightweight R package workflow as the surrounding packages in this workspace:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">make</span> rd       <span class="co"># roxygen2 docs + NAMESPACE</span></span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="fu">make</span> test     <span class="co"># tinytest</span></span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">make</span> rdm      <span class="co"># render README.md from README.Rmd</span></span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="fu">make</span> site     <span class="co"># pkgdown site</span></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="fu">make</span> check    <span class="co"># R CMD check --as-cran --no-manual</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">make</span> rd             <span class="co"># roxygen2 docs + NAMESPACE</span></span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="fu">make</span> test           <span class="co"># tinytest</span></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a><span class="fu">make</span> index-real-hpo <span class="co"># download/build a cached full HPO index</span></span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a><span class="fu">make</span> rdm            <span class="co"># render README.md from README.Rmd</span></span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a><span class="fu">make</span> rdm-real-hpo   <span class="co"># render README.md with the full real-HPO stress test</span></span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a><span class="fu">make</span> site           <span class="co"># pkgdown site</span></span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a><span class="fu">make</span> check          <span class="co"># R CMD check --as-cran --no-manual</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">

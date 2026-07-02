@@ -49,6 +49,26 @@ Create annotators, run FastHPOCR, and serialize annotations.
   [`hpo_print_annotations()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.md)
   : Write or print FastHPOCR annotations
 
+## Hybrid adjudication harness
+
+Standardize candidates, prompts, adjudication JSON, and provider
+comparison logs.
+
+- [`hpo_harness_modes()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_harness_modes.md)
+  : List supported HPO extraction harness modes
+- [`hpo_candidate_table()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_candidate_table.md)
+  : Convert FastHPOCR annotations to a harness candidate table
+- [`hpo_extract_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_extract_candidates.md)
+  : Extract FastHPOCR candidate tables for one or more cases
+- [`hpo_adjudication_schema()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_schema.md)
+  : JSON schema for model adjudication of HPO candidates
+- [`hpo_adjudication_prompt()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_prompt.md)
+  : Build a prompt for candidate-to-model HPO adjudication
+- [`hpo_parse_adjudication()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_parse_adjudication.md)
+  : Parse model adjudication JSON into a data frame
+- [`hpo_adjudicate_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudicate_candidates.md)
+  : Run a candidates-to-model adjudication step
+
 ## Indexing
 
 Build FastHPOCR indexes from ontology source files.

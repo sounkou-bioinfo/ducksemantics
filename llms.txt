@@ -282,17 +282,495 @@ The intended split is:
 In that design this package owns the deterministic FastHPOCR lane: text
 in, candidate HPO rows out, with provenance and offsets preserved.
 
+## Hybrid adjudication harness primitives
+
+The package now also provides the small, model-agnostic pieces needed to
+compare hybrid configurations without making `RfastHPOCR` depend on any
+one LLM provider. The main practical arm is:
+
+``` text
+note + FastHPOCR candidates -> model keep/drop adjudication
+```
+
+FastHPOCR still generates deterministic candidates. The model is asked
+only for short auditable fields: `decision`, `evidence_span`, and
+`short_reason`. Reasoning-token counts, when a provider exposes them,
+are stored only as run metadata.
+
+``` r
+
+review_text <- "Short stature was noted. No seizures were reported."
+review_hits <- hpo_annotate(ann_all, review_text, longest_match = TRUE)
+review_candidates <- hpo_candidate_table(review_hits, case_id = "readme-case-001")
+review_candidates[, c("case_id", "candidate_id", "candidate_span", "hpo_id", "hpo_label")]
+#>           case_id         candidate_id candidate_span     hpo_id     hpo_label
+#> 1 readme-case-001 readme-case-001:0001  Short stature HP:0004322 Short stature
+#> 2 readme-case-001 readme-case-001:0002       seizures HP:0001250      seizures
+```
+
+The harness modes are explicit so that `tool_only`, `model_only`, and
+hybrid arms can be compared with the same term-level schema.
+
+``` r
+
+hpo_harness_modes()[, c("mode", "question")]
+#>                           mode
+#> 1                    tool_only
+#> 2                   model_only
+#> 3            model_tools_model
+#> 4 model_candidates_tools_model
+#> 5             candidates_model
+#> 6       candidates_tools_model
+#>                                                                  question
+#> 1                              What is the deterministic FastHPOCR floor?
+#> 2              Can the model extract and map HPO terms without grounding?
+#> 3                       Does ontology grounding fix model mapping errors?
+#> 4 Does model-generated candidate expansion plus grounding improve recall?
+#> 5                 Does model cleanup fix FastHPOCR context noise cheaply?
+#> 6 Does ontology validation after candidate generation add useful hygiene?
+```
+
+The prompt embeds the candidate rows and a strict JSON schema. The
+README prints only the beginning of the prompt to keep the rendered
+document short.
+
+``` r
+
+prompt <- hpo_adjudication_prompt(review_text, review_candidates)
+cat(paste(head(strsplit(prompt, "\n", fixed = TRUE)[[1]], 16), collapse = "\n"))
+#> You are adjudicating candidate Human Phenotype Ontology (HPO) extractions from de-identified clinical text.
+#> Return only valid JSON matching the schema. Do not include markdown fences or explanatory prose outside JSON.
+#> Do not provide hidden chain-of-thought. The clinical audit fields are decision, evidence_span, and short_reason.
+#> Reasoning-token counts, if available from the API, are run metadata and are not a clinical audit field.
+#> 
+#> Prompt version: rfasthpocr-candidates-model-v1
+#> Case id: readme-case-001
+#> 
+#> Decision rules:
+#> - Return exactly one decision for each supplied candidate_id.
+#> - decision = 'keep' only if the phenotype is present for the patient in the note.
+#> - decision = 'drop' if the mention is negated, family-history-only, uncertain/not established, not about the patient, too generic, duplicated by a more specific kept candidate, or unsupported.
+#> - patient_context must be one of: patient, family_history, negated, uncertain.
+#> - evidence_span should be the shortest exact quote from the note that supports the decision, including negation or family-history wording when relevant.
+#> - short_reason should be one concise sentence; do not include chain-of-thought.
+#> - If the supplied HPO term is wrong but a better HPO term is obvious from the same evidence, keep decision='drop' and fill replacement_hpo_id/replacement_hpo_label.
+```
+
+A model response is expected to be JSON. This mocked response
+demonstrates the clinical audit shape: keep direct patient findings and
+drop negated findings with an evidence quote and a short reason.
+
+``` r
+
+mock_response <- jsonlite::toJSON(
+  list(
+    case_id = "readme-case-001",
+    decisions = list(
+      list(
+        candidate_id = "readme-case-001:0001",
+        candidate_span = "Short stature",
+        normalized_phrase = "Short stature",
+        hpo_id = "HP:0004322",
+        hpo_label = "Short stature",
+        decision = "keep",
+        support_type = "direct",
+        patient_context = "patient",
+        evidence_span = "Short stature was noted",
+        short_reason = "The phenotype is directly stated for the patient.",
+        replacement_hpo_id = NULL,
+        replacement_hpo_label = NULL,
+        confidence = 0.95
+      ),
+      list(
+        candidate_id = "readme-case-001:0002",
+        candidate_span = "seizures",
+        normalized_phrase = "seizures",
+        hpo_id = "HP:0001250",
+        hpo_label = "Seizure",
+        decision = "drop",
+        support_type = "none",
+        patient_context = "negated",
+        evidence_span = "No seizures were reported",
+        short_reason = "The note explicitly negates seizures.",
+        replacement_hpo_id = NULL,
+        replacement_hpo_label = NULL,
+        confidence = 0.99
+      )
+    )
+  ),
+  auto_unbox = TRUE,
+  null = "null",
+  pretty = TRUE
+)
+
+adjudicated <- hpo_parse_adjudication(mock_response, candidates = review_candidates)
+adjudicated[, c(
+  "candidate_span", "hpo_id", "decision", "patient_context",
+  "evidence_span", "short_reason"
+)]
+#>   candidate_span     hpo_id decision patient_context             evidence_span
+#> 1  Short stature HP:0004322     keep         patient   Short stature was noted
+#> 2       seizures HP:0001250     drop         negated No seizures were reported
+#>                                        short_reason
+#> 1 The phenotype is directly stated for the patient.
+#> 2             The note explicitly negates seizures.
+```
+
+[`hpo_adjudicate_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudicate_candidates.md)
+accepts any model runner function. In a real pipeline the runner can
+call `piknit::pi_run()`, Ollama, vLLM, LM Studio, or a remote API. The
+run log captures provider/model metadata, token usage, latency, parse
+success, and reasoning-token counts when available.
+
+``` r
+
+mock_runner <- function(prompt) {
+  out <- mock_response
+  attr(out, "usage") <- list(
+    input_tokens = 500L,
+    output_tokens = 160L,
+    total_tokens = 660L,
+    reasoning_tokens = 0L,
+    tool_call_count = 0L
+  )
+  out
+}
+
+run <- hpo_adjudicate_candidates(
+  review_text,
+  review_candidates,
+  runner = mock_runner,
+  provider = "mock-provider",
+  model = "mock-small-model",
+  run_id = "readme-run-001"
+)
+run$run_log[, c(
+  "provider", "model", "mode", "input_tokens", "output_tokens",
+  "reasoning_tokens", "latency_seconds", "parse_success"
+)]
+#>        provider            model             mode input_tokens output_tokens
+#> 1 mock-provider mock-small-model candidates_model          500           160
+#>   reasoning_tokens latency_seconds parse_success
+#> 1                0    1.525879e-05          TRUE
+```
+
+## Optional real-HPO clinical stress test
+
+The tiny ontology above keeps the ordinary README fast and
+deterministic. For a real HPO smoke test, set
+`RFASTHPOCR_README_REAL_HPO=true` or run `make rdm-real-hpo`. That path
+downloads the real `hp.obo`, builds a real FastHPOCR HPO index under
+`RFASTHPOCR_REAL_HPO_DIR` or a user cache directory, and runs a
+context-heavy clinical note through the same harness primitives.
+
+This is intentionally opt-in because a full HPO index is large and can
+take several minutes to build, but the code below is real executable
+README code, not pseudo-code.
+
+``` r
+
+real_hpo_dir <- Sys.getenv(
+  "RFASTHPOCR_REAL_HPO_DIR",
+  file.path(tools::R_user_dir("RfastHPOCR", "cache"), "real-hpo")
+)
+dir.create(real_hpo_dir, recursive = TRUE, showWarnings = FALSE)
+
+real_hp_obo <- file.path(real_hpo_dir, "hp.obo")
+if (!file.exists(real_hp_obo)) {
+  real_hp_obo <- download_hpo_obo(real_hpo_dir, quiet = TRUE)
+}
+
+real_index_dir <- file.path(real_hpo_dir, "index")
+real_index <- file.path(real_index_dir, "hp.index")
+if (!file.exists(real_index)) {
+  dir.create(real_index_dir, recursive = TRUE, showWarnings = FALSE)
+  real_index_log <- capture.output({
+    real_index <- index_hpo(
+      real_hp_obo,
+      real_index_dir,
+      root_concepts = "HP:0000118",
+      include_top_level_category = TRUE,
+      compress_index = FALSE
+    )
+  })
+} else {
+  real_index <- normalizePath(real_index, mustWork = TRUE)
+  real_index_log <- "Using cached real HPO index."
+}
+
+data.frame(
+  hp_obo = basename(real_hp_obo),
+  hpo_index = basename(real_index),
+  index_size_mb = round(file.info(real_index)$size / 1024^2, 1),
+  stringsAsFactors = FALSE
+)
+#>   hp_obo hpo_index index_size_mb
+#> 1 hp.obo  hp.index         132.7
+```
+
+``` r
+
+stress_note <- paste(
+  "The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect.",
+  "He has no seizures, no hypotonia, no ataxia, and no hearing loss. There is no short stature and no microcephaly.",
+  "Family history is notable for a brother with thrombocytosis and autism and a maternal aunt with cardiomyopathy. These findings are not present in the proband.",
+  "Earlier notes described the child as floppy in infancy and not talking yet at 3 years of age. Teachers report that he learns slowly. Parents also describe occasional staring spells.",
+  sep = "\n\n"
+)
+
+real_ann <- hpo_annotator(real_index)
+stress_hits <- hpo_annotate(real_ann, stress_note, longest_match = TRUE)
+stress_candidates <- hpo_candidate_table(
+  stress_hits,
+  case_id = "hpo-stress-001",
+  source = "FastHPOCR-real-HPO"
+)
+
+stress_candidates[, c(
+  "candidate_span", "hpo_id", "hpo_label", "start_offset", "end_offset"
+)]
+#>                candidate_span     hpo_id                   hpo_label
+#> 1  global developmental delay HP:0001263 Developmental delay, global
+#> 2    autism spectrum disorder HP:0000729    Autism spectrum disorder
+#> 3                      autism HP:0000717                      Autism
+#> 4     intellectual disability HP:0001249     Intellectual disability
+#> 5               brachydactyly HP:0001156               Brachydactyly
+#> 6        hypomelanotic macule HP:0009719       Hypomelanotic macules
+#> 7         café-au-lait macule HP:0000957        Cafe-au-lait macules
+#> 8              cardiomyopathy HP:0001638              Cardiomyopathy
+#> 9              cardiomyopathy HP:0001638              Cardiomyopathy
+#> 10      septal cardiac defect HP:0001671         Heart septal defect
+#> 11                   seizures HP:0001250                     Seizure
+#> 12                  hypotonia HP:0001252                   Hypotonia
+#> 13                     ataxia HP:0001251                      Ataxia
+#> 14               hearing loss HP:0000365                Hearing loss
+#> 15              short stature HP:0004322               Short stature
+#> 16               microcephaly HP:0000252                Microcephaly
+#> 17             thrombocytosis HP:0001894              Thrombocytosis
+#>    start_offset end_offset
+#> 1            73         99
+#> 2           101        125
+#> 3           492        498
+#> 4           127        150
+#> 5           152        165
+#> 6           171        191
+#> 7           214        233
+#> 8           269        283
+#> 9           524        538
+#> 10          290        311
+#> 11          324        332
+#> 12          337        346
+#> 13          351        357
+#> 14          366        378
+#> 15          392        405
+#> 16          413        425
+#> 17          473        487
+```
+
+The real HPO candidate layer deliberately captures both true proband
+findings and context traps: negated terms, family-history terms, and
+duplicate mentions. That is exactly why the model layer should produce
+explicit keep/drop decisions with an evidence quote.
+
+``` r
+
+negated_ids <- c(
+  "HP:0001250", # seizures
+  "HP:0001252", # hypotonia
+  "HP:0001251", # ataxia
+  "HP:0000365", # hearing loss
+  "HP:0004322", # short stature
+  "HP:0000252"  # microcephaly
+)
+
+negated_evidence <- c(
+  "HP:0001250" = "no seizures",
+  "HP:0001252" = "no hypotonia",
+  "HP:0001251" = "no ataxia",
+  "HP:0000365" = "no hearing loss",
+  "HP:0004322" = "no short stature",
+  "HP:0000252" = "no microcephaly"
+)
+
+stress_decision <- function(candidate) {
+  hpo_id <- as.character(candidate$hpo_id)
+  start <- as.integer(candidate$start_offset)
+
+  if (hpo_id %in% negated_ids) {
+    return(list(
+      candidate_id = as.character(candidate$candidate_id),
+      candidate_span = as.character(candidate$candidate_span),
+      normalized_phrase = as.character(candidate$normalized_phrase),
+      hpo_id = hpo_id,
+      hpo_label = as.character(candidate$hpo_label),
+      decision = "drop",
+      support_type = "none",
+      patient_context = "negated",
+      evidence_span = unname(negated_evidence[[hpo_id]]),
+      short_reason = "The note explicitly negates this phenotype for the proband.",
+      replacement_hpo_id = NULL,
+      replacement_hpo_label = NULL,
+      confidence = 1
+    ))
+  }
+
+  family_history <- hpo_id == "HP:0001894" ||
+    (hpo_id == "HP:0000717" && start > 450L) ||
+    (hpo_id == "HP:0001638" && start > 450L)
+
+  if (family_history) {
+    evidence <- if (hpo_id == "HP:0001894") {
+      "brother with thrombocytosis"
+    } else if (hpo_id == "HP:0000717") {
+      "brother with thrombocytosis and autism"
+    } else {
+      "maternal aunt with cardiomyopathy"
+    }
+    return(list(
+      candidate_id = as.character(candidate$candidate_id),
+      candidate_span = as.character(candidate$candidate_span),
+      normalized_phrase = as.character(candidate$normalized_phrase),
+      hpo_id = hpo_id,
+      hpo_label = as.character(candidate$hpo_label),
+      decision = "drop",
+      support_type = "none",
+      patient_context = "family_history",
+      evidence_span = evidence,
+      short_reason = "The evidence is family history and is stated not to be present in the proband.",
+      replacement_hpo_id = NULL,
+      replacement_hpo_label = NULL,
+      confidence = 1
+    ))
+  }
+
+  list(
+    candidate_id = as.character(candidate$candidate_id),
+    candidate_span = as.character(candidate$candidate_span),
+    normalized_phrase = as.character(candidate$normalized_phrase),
+    hpo_id = hpo_id,
+    hpo_label = as.character(candidate$hpo_label),
+    decision = "keep",
+    support_type = "direct",
+    patient_context = "patient",
+    evidence_span = as.character(candidate$candidate_span),
+    short_reason = "The phenotype is directly stated for the proband.",
+    replacement_hpo_id = NULL,
+    replacement_hpo_label = NULL,
+    confidence = 0.95
+  )
+}
+
+stress_response <- jsonlite::toJSON(
+  list(
+    case_id = "hpo-stress-001",
+    decisions = lapply(seq_len(nrow(stress_candidates)), function(i) {
+      stress_decision(stress_candidates[i, , drop = FALSE])
+    })
+  ),
+  auto_unbox = TRUE,
+  null = "null"
+)
+
+stress_runner <- function(prompt) {
+  out <- stress_response
+  attr(out, "usage") <- list(
+    input_tokens = NA_integer_,
+    output_tokens = NA_integer_,
+    total_tokens = NA_integer_,
+    reasoning_tokens = NA_integer_,
+    tool_call_count = 0L
+  )
+  out
+}
+
+stress_run <- hpo_adjudicate_candidates(
+  stress_note,
+  stress_candidates,
+  runner = stress_runner,
+  provider = "expected-output",
+  model = "manual-stress-adjudicator",
+  run_id = "hpo-stress-readme"
+)
+
+stress_run$adjudication[, c(
+  "candidate_span", "hpo_id", "decision", "patient_context",
+  "evidence_span", "short_reason"
+)]
+#>                candidate_span     hpo_id decision patient_context
+#> 1  global developmental delay HP:0001263     keep         patient
+#> 2    autism spectrum disorder HP:0000729     keep         patient
+#> 3                      autism HP:0000717     drop  family_history
+#> 4     intellectual disability HP:0001249     keep         patient
+#> 5               brachydactyly HP:0001156     keep         patient
+#> 6        hypomelanotic macule HP:0009719     keep         patient
+#> 7         café-au-lait macule HP:0000957     keep         patient
+#> 8              cardiomyopathy HP:0001638     keep         patient
+#> 9              cardiomyopathy HP:0001638     drop  family_history
+#> 10      septal cardiac defect HP:0001671     keep         patient
+#> 11                   seizures HP:0001250     drop         negated
+#> 12                  hypotonia HP:0001252     drop         negated
+#> 13                     ataxia HP:0001251     drop         negated
+#> 14               hearing loss HP:0000365     drop         negated
+#> 15              short stature HP:0004322     drop         negated
+#> 16               microcephaly HP:0000252     drop         negated
+#> 17             thrombocytosis HP:0001894     drop  family_history
+#>                             evidence_span
+#> 1              global developmental delay
+#> 2                autism spectrum disorder
+#> 3  brother with thrombocytosis and autism
+#> 4                 intellectual disability
+#> 5                           brachydactyly
+#> 6                    hypomelanotic macule
+#> 7                     café-au-lait macule
+#> 8                          cardiomyopathy
+#> 9       maternal aunt with cardiomyopathy
+#> 10                  septal cardiac defect
+#> 11                            no seizures
+#> 12                           no hypotonia
+#> 13                              no ataxia
+#> 14                        no hearing loss
+#> 15                       no short stature
+#> 16                        no microcephaly
+#> 17            brother with thrombocytosis
+#>                                                                      short_reason
+#> 1                               The phenotype is directly stated for the proband.
+#> 2                               The phenotype is directly stated for the proband.
+#> 3  The evidence is family history and is stated not to be present in the proband.
+#> 4                               The phenotype is directly stated for the proband.
+#> 5                               The phenotype is directly stated for the proband.
+#> 6                               The phenotype is directly stated for the proband.
+#> 7                               The phenotype is directly stated for the proband.
+#> 8                               The phenotype is directly stated for the proband.
+#> 9  The evidence is family history and is stated not to be present in the proband.
+#> 10                              The phenotype is directly stated for the proband.
+#> 11                    The note explicitly negates this phenotype for the proband.
+#> 12                    The note explicitly negates this phenotype for the proband.
+#> 13                    The note explicitly negates this phenotype for the proband.
+#> 14                    The note explicitly negates this phenotype for the proband.
+#> 15                    The note explicitly negates this phenotype for the proband.
+#> 16                    The note explicitly negates this phenotype for the proband.
+#> 17 The evidence is family history and is stated not to be present in the proband.
+```
+
+The optional real-HPO test also shows the boundary between the
+deterministic candidate layer and the model-expansion arms: phrases such
+as “floppy in infancy”, “not talking yet”, “learns slowly”, and “staring
+spells” may require `model_only` or `model_candidates_tools_model` runs
+if we want inferred or paraphrased phenotype recovery.
+
 ## Development
 
 This package follows the same lightweight R package workflow as the
 surrounding packages in this workspace:
 
 ``` sh
-make rd       # roxygen2 docs + NAMESPACE
-make test     # tinytest
-make rdm      # render README.md from README.Rmd
-make site     # pkgdown site
-make check    # R CMD check --as-cran --no-manual
+make rd             # roxygen2 docs + NAMESPACE
+make test           # tinytest
+make index-real-hpo # download/build a cached full HPO index
+make rdm            # render README.md from README.Rmd
+make rdm-real-hpo   # render README.md with the full real-HPO stress test
+make site           # pkgdown site
+make check          # R CMD check --as-cran --no-manual
 ```
 
 # Package index
@@ -345,6 +823,26 @@ Create annotators, run FastHPOCR, and serialize annotations.
 - [`hpo_write_annotations()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.md)
   [`hpo_print_annotations()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.md)
   : Write or print FastHPOCR annotations
+
+## Hybrid adjudication harness
+
+Standardize candidates, prompts, adjudication JSON, and provider
+comparison logs.
+
+- [`hpo_harness_modes()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_harness_modes.md)
+  : List supported HPO extraction harness modes
+- [`hpo_candidate_table()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_candidate_table.md)
+  : Convert FastHPOCR annotations to a harness candidate table
+- [`hpo_extract_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_extract_candidates.md)
+  : Extract FastHPOCR candidate tables for one or more cases
+- [`hpo_adjudication_schema()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_schema.md)
+  : JSON schema for model adjudication of HPO candidates
+- [`hpo_adjudication_prompt()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_prompt.md)
+  : Build a prompt for candidate-to-model HPO adjudication
+- [`hpo_parse_adjudication()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_parse_adjudication.md)
+  : Parse model adjudication JSON into a data frame
+- [`hpo_adjudicate_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudicate_candidates.md)
+  : Run a candidates-to-model adjudication step
 
 ## Indexing
 
