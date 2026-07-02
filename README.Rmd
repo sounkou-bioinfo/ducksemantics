@@ -78,7 +78,8 @@ indexing source, plus optional audit resources such as `download_hpo_json()`,
 `download_hpo_phenotype_hpoa()`, and `download_hpo_genes_to_phenotype()`.
 
 MONDO and Orphanet download helpers are present for the other upstream
-FastHPOCR indexers, but they are not the focus of this package.
+FastHPOCR indexers, but they are not the focus of this package. MONDO release
+assets are published at <https://github.com/monarch-initiative/mondo/releases>.
 
 The rest of this README is not a mock API sketch: it creates a tiny HPO-style
 OBO file, runs the same HPO download helper through a local file source, indexes

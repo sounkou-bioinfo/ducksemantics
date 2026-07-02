@@ -6,6 +6,7 @@ HPO_GENES_TO_PHENOTYPE_URL <- "https://purl.obolibrary.org/obo/hp/hpoa/genes_to_
 HPO_PHENOTYPE_TO_GENES_URL <- "https://purl.obolibrary.org/obo/hp/hpoa/phenotype_to_genes.txt"
 HPO_GENES_TO_DISEASE_URL <- "https://purl.obolibrary.org/obo/hp/hpoa/genes_to_disease.txt"
 MONDO_OBO_URL <- "https://purl.obolibrary.org/obo/mondo.obo"
+MONDO_RELEASES_PAGE <- "https://github.com/monarch-initiative/mondo/releases"
 ORPHANET_PRODUCT1_XML_URL <- "https://www.orphadata.com/data/xml/en_product1.xml"
 HPO_ONTOLOGY_DATA_PAGE <- "https://github.com/obophenotype/human-phenotype-ontology/releases"
 
@@ -31,6 +32,7 @@ fast_hpo_cr_ontology_urls <- function() {
     hpo_genes_to_disease = HPO_GENES_TO_DISEASE_URL,
     hpo_data_page = HPO_ONTOLOGY_DATA_PAGE,
     mondo_obo = MONDO_OBO_URL,
+    mondo_releases = MONDO_RELEASES_PAGE,
     orphanet_product1_xml = ORPHANET_PRODUCT1_XML_URL
   )
 }

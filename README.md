@@ -98,7 +98,9 @@ the indexing source, plus optional audit resources such as
 `download_hpo_genes_to_phenotype()`.
 
 MONDO and Orphanet download helpers are present for the other upstream
-FastHPOCR indexers, but they are not the focus of this package.
+FastHPOCR indexers, but they are not the focus of this package. MONDO
+release assets are published at
+<https://github.com/monarch-initiative/mondo/releases>.
 
 The rest of this README is not a mock API sketch: it creates a tiny
 HPO-style OBO file, runs the same HPO download helper through a local
@@ -181,7 +183,7 @@ index_all <- index_hpo(
 #>  - Found 0 duplicated labels.
 #>  - Indexing HPO terms ...
 #>  - Serializing index ...
-#>  - HPO index created in 0.38s
+#>  - HPO index created in 0.35s
 file.exists(index_all)
 #> [1] TRUE
 
@@ -249,7 +251,7 @@ index_external <- index_hpo(
 #>  - Found 0 duplicated labels.
 #>  - Indexing HPO terms ...
 #>  - Serializing index ...
-#>  - HPO index created in 0.36s
+#>  - HPO index created in 0.35s
 
 ann_external <- hpo_annotator(index_external)
 hpo_annotate(ann_external, "Small stature was noted.")[, c("span", "id", "label")]
