@@ -147,13 +147,16 @@ basename(hp_obo)
 Index both concrete phenotype branches and annotate a sentence.
 
 ```{r index-all}
-index_all <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-all"),
-  root_concepts = c("HP:0000119", "HP:0000707"),
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
+index_all_log <- capture.output({
+  index_all <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-all"),
+    root_concepts = c("HP:0000119", "HP:0000707"),
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_all_log, value = TRUE)
 file.exists(index_all)
 
 ann_all <- hpo_annotator(index_all)
@@ -170,13 +173,16 @@ real second FastHPOCR indexing pass; the genitourinary `Short stature` term is
 not present in this restricted index.
 
 ```{r reindex-restricted}
-index_neuro <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-neuro"),
-  root_concepts = "HP:0000707",
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
+index_neuro_log <- capture.output({
+  index_neuro <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-neuro"),
+    root_concepts = "HP:0000707",
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_neuro_log, value = TRUE)
 
 ann_neuro <- hpo_annotator(index_neuro)
 hpo_annotate(
@@ -194,14 +200,17 @@ FastHPOCR.
 syn_file <- file.path(work_dir, "external-synonyms.txt")
 writeLines("HP:0004322=small stature", syn_file)
 
-index_external <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-external"),
-  root_concepts = c("HP:0000119", "HP:0000707"),
-  external_syn_file = syn_file,
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
+index_external_log <- capture.output({
+  index_external <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-external"),
+    root_concepts = c("HP:0000119", "HP:0000707"),
+    external_syn_file = syn_file,
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_external_log, value = TRUE)
 
 ann_external <- hpo_annotator(index_external)
 hpo_annotate(ann_external, "Small stature was noted.")[, c("span", "id", "label")]
