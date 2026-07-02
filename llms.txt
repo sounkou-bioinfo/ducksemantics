@@ -171,20 +171,18 @@ Index both concrete phenotype branches and annotate a sentence.
 
 ``` r
 
-index_all <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-all"),
-  root_concepts = c("HP:0000119", "HP:0000707"),
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
-#>  - Preprocessing HPO terms ...
-#>  - Processing labels ...
-#>  - Collected 2 terms.
-#>  - Found 0 duplicated labels.
-#>  - Indexing HPO terms ...
-#>  - Serializing index ...
-#>  - HPO index created in 0.35s
+index_all_log <- capture.output({
+  index_all <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-all"),
+    root_concepts = c("HP:0000119", "HP:0000707"),
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_all_log, value = TRUE)
+#> [1] " - Collected 2 terms."     " - Indexing HPO terms ..."
+#> [3] " - Serializing index ..."
 file.exists(index_all)
 #> [1] TRUE
 
@@ -206,20 +204,18 @@ is a real second FastHPOCR indexing pass; the genitourinary
 
 ``` r
 
-index_neuro <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-neuro"),
-  root_concepts = "HP:0000707",
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
-#>  - Preprocessing HPO terms ...
-#>  - Processing labels ...
-#>  - Collected 1 terms.
-#>  - Found 0 duplicated labels.
-#>  - Indexing HPO terms ...
-#>  - Serializing index ...
-#>  - HPO index created in 0.22s
+index_neuro_log <- capture.output({
+  index_neuro <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-neuro"),
+    root_concepts = "HP:0000707",
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_neuro_log, value = TRUE)
+#> [1] " - Collected 1 terms."     " - Indexing HPO terms ..."
+#> [3] " - Serializing index ..."
 
 ann_neuro <- hpo_annotator(index_neuro)
 hpo_annotate(
@@ -240,21 +236,19 @@ passed through to FastHPOCR.
 syn_file <- file.path(work_dir, "external-synonyms.txt")
 writeLines("HP:0004322=small stature", syn_file)
 
-index_external <- index_hpo(
-  hpo_file = hp_obo,
-  output_dir = file.path(work_dir, "index-external"),
-  root_concepts = c("HP:0000119", "HP:0000707"),
-  external_syn_file = syn_file,
-  include_top_level_category = TRUE,
-  compress_index = FALSE
-)
-#>  - Preprocessing HPO terms ...
-#>  - Processing labels ...
-#>  - Collected 2 terms.
-#>  - Found 0 duplicated labels.
-#>  - Indexing HPO terms ...
-#>  - Serializing index ...
-#>  - HPO index created in 0.35s
+index_external_log <- capture.output({
+  index_external <- index_hpo(
+    hpo_file = hp_obo,
+    output_dir = file.path(work_dir, "index-external"),
+    root_concepts = c("HP:0000119", "HP:0000707"),
+    external_syn_file = syn_file,
+    include_top_level_category = TRUE,
+    compress_index = FALSE
+  )
+})
+grep("Collected|Indexing HPO terms|Serializing index", index_external_log, value = TRUE)
+#> [1] " - Collected 2 terms."     " - Indexing HPO terms ..."
+#> [3] " - Serializing index ..."
 
 ann_external <- hpo_annotator(index_external)
 hpo_annotate(ann_external, "Small stature was noted.")[, c("span", "id", "label")]

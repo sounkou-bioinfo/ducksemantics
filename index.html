@@ -159,20 +159,18 @@
 <span><span class="co">#&gt; [1] "hp.obo"</span></span></code></pre></div>
 <p>Index both concrete phenotype branches and annotate a sentence.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">index_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>  hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>  output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-all"</span><span class="op">)</span>,</span>
-<span>  root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
-<span>  include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;  - Preprocessing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Processing labels ...</span></span>
-<span><span class="co">#&gt;  - Collected 2 terms.</span></span>
-<span><span class="co">#&gt;  - Found 0 duplicated labels.</span></span>
-<span><span class="co">#&gt;  - Indexing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Serializing index ...</span></span>
-<span><span class="co">#&gt;  - HPO index created in 0.35s</span></span>
+<code class="sourceCode R"><span><span class="va">index_all_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">index_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
+<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
+<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-all"</span><span class="op">)</span>,</span>
+<span>    root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
+<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_all_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] " - Collected 2 terms."     " - Indexing HPO terms ..."</span></span>
+<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">index_all</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span></span>
@@ -188,20 +186,18 @@
 <span><span class="co">#&gt; 2      seizures HP:0001250      seizures    35  42           34         42</span></span></code></pre></div>
 <p>Re-index the same ontology restricted to the nervous-system branch. This is a real second FastHPOCR indexing pass; the genitourinary <code>Short stature</code> term is not present in this restricted index.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">index_neuro</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>  hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>  output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-neuro"</span><span class="op">)</span>,</span>
-<span>  root_concepts <span class="op">=</span> <span class="st">"HP:0000707"</span>,</span>
-<span>  include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;  - Preprocessing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Processing labels ...</span></span>
-<span><span class="co">#&gt;  - Collected 1 terms.</span></span>
-<span><span class="co">#&gt;  - Found 0 duplicated labels.</span></span>
-<span><span class="co">#&gt;  - Indexing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Serializing index ...</span></span>
-<span><span class="co">#&gt;  - HPO index created in 0.22s</span></span>
+<code class="sourceCode R"><span><span class="va">index_neuro_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">index_neuro</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
+<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
+<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-neuro"</span><span class="op">)</span>,</span>
+<span>    root_concepts <span class="op">=</span> <span class="st">"HP:0000707"</span>,</span>
+<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_neuro_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] " - Collected 1 terms."     " - Indexing HPO terms ..."</span></span>
+<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
 <span></span>
 <span><span class="va">ann_neuro</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">index_neuro</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span></span>
@@ -216,21 +212,19 @@
 <code class="sourceCode R"><span><span class="va">syn_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"external-synonyms.txt"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="st">"HP:0004322=small stature"</span>, <span class="va">syn_file</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">index_external</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>  hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>  output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-external"</span><span class="op">)</span>,</span>
-<span>  root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
-<span>  external_syn_file <span class="op">=</span> <span class="va">syn_file</span>,</span>
-<span>  include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;  - Preprocessing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Processing labels ...</span></span>
-<span><span class="co">#&gt;  - Collected 2 terms.</span></span>
-<span><span class="co">#&gt;  - Found 0 duplicated labels.</span></span>
-<span><span class="co">#&gt;  - Indexing HPO terms ...</span></span>
-<span><span class="co">#&gt;  - Serializing index ...</span></span>
-<span><span class="co">#&gt;  - HPO index created in 0.35s</span></span>
+<span><span class="va">index_external_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>  <span class="va">index_external</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
+<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
+<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-external"</span><span class="op">)</span>,</span>
+<span>    root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
+<span>    external_syn_file <span class="op">=</span> <span class="va">syn_file</span>,</span>
+<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_external_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] " - Collected 2 terms."     " - Indexing HPO terms ..."</span></span>
+<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
 <span></span>
 <span><span class="va">ann_external</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">index_external</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">ann_external</span>, <span class="st">"Small stature was noted."</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"id"</span>, <span class="st">"label"</span><span class="op">)</span><span class="op">]</span></span>
