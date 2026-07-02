@@ -2,29 +2,7 @@ if (!identical(tolower(Sys.getenv("RFASTHPOCR_TEST_REAL_HPO")), "true")) {
   exit_file("Set RFASTHPOCR_TEST_REAL_HPO=true to run the full real-HPO stress test")
 }
 
-cache <- Sys.getenv(
-  "RFASTHPOCR_REAL_HPO_DIR",
-  file.path(tools::R_user_dir("RfastHPOCR", "cache"), "real-hpo")
-)
-dir.create(cache, recursive = TRUE, showWarnings = FALSE)
-
-hp <- file.path(cache, "hp.obo")
-if (!file.exists(hp)) {
-  hp <- download_hpo_obo(cache, quiet = TRUE)
-}
-
-idx_dir <- file.path(cache, "index")
-idx <- file.path(idx_dir, "hp.index")
-if (!file.exists(idx)) {
-  dir.create(idx_dir, recursive = TRUE, showWarnings = FALSE)
-  idx <- index_hpo(
-    hp,
-    idx_dir,
-    root_concepts = "HP:0000118",
-    include_top_level_category = TRUE,
-    compress_index = FALSE
-  )
-}
+idx <- hpo_real_index()
 
 note <- paste(
   "The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect.",

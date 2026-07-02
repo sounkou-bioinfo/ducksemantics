@@ -48,6 +48,7 @@ reference:
     desc: Build FastHPOCR indexes from ontology source files.
     contents:
       - hpo_index_config
+      - hpo_real_index
       - index_hpo
       - index_mondo
       - index_orphanet

@@ -448,8 +448,8 @@ hpo_parse_adjudication <- function(x, candidates = NULL) {
 #'   ),
 #'   auto_unbox = TRUE
 #' )
-#' mock_runner <- function(prompt) json
-#' hpo_adjudicate_candidates("No seizures were reported.", candidates, mock_runner)$adjudication
+#' fixture_runner <- function(prompt) json
+#' hpo_adjudicate_candidates("No seizures were reported.", candidates, fixture_runner)$adjudication
 hpo_adjudicate_candidates <- function(note,
                                       candidates,
                                       runner,
@@ -854,16 +854,16 @@ make_hpo_run_log <- function(provider,
     run_id = run_id,
     prompt_version = prompt_version,
     tool_config = tool_config_to_string(tool_config),
-    input_tokens = usage_number(usage, c("input_tokens", "prompt_tokens")),
-    output_tokens = usage_number(usage, c("output_tokens", "completion_tokens")),
-    total_tokens = usage_number(usage, c("total_tokens")),
+    input_tokens = usage_number(usage, c("input_tokens", "prompt_tokens", "input")),
+    output_tokens = usage_number(usage, c("output_tokens", "completion_tokens", "output")),
+    total_tokens = usage_number(usage, c("total_tokens", "totalTokens", "total")),
     reasoning_tokens = usage_reasoning_tokens(usage),
     latency_seconds = latency_seconds,
     tool_call_count = usage_number(usage, c("tool_call_count")),
     tool_names_used = usage_character(usage, c("tool_names_used", "tool_names")),
     retry_count = as.integer(retry_count),
     parse_success = parse_success,
-    estimated_cost_usd = estimated_cost_usd,
+    estimated_cost_usd = if (is.na(estimated_cost_usd)) usage_cost_total(usage) else estimated_cost_usd,
     candidate_count = as.integer(candidate_count),
     response_chars = as.integer(response_chars),
     error_message = error_message,
@@ -911,7 +911,7 @@ usage_value <- function(usage, fields) {
 }
 
 usage_reasoning_tokens <- function(usage) {
-  direct <- usage_number(usage, c("reasoning_tokens"))
+  direct <- usage_number(usage, c("reasoning_tokens", "reasoning"))
   if (!is.na(direct)) {
     return(direct)
   }
@@ -920,6 +920,13 @@ usage_reasoning_tokens <- function(usage) {
     return(as.numeric(details$reasoning_tokens[[1]]))
   }
   NA_real_
+}
+
+usage_cost_total <- function(usage) {
+  if (is.list(usage$cost) && !is.null(usage$cost$total)) {
+    return(as.numeric(usage$cost$total[[1]]))
+  }
+  usage_number(usage, c("estimated_cost_usd", "cost_total"))
 }
 
 new_hpo_run_id <- function() {

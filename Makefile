@@ -50,13 +50,12 @@ test: install
 rdm: install
 	R -e "rmarkdown::render('README.Rmd')" && rm -f README.html
 
-# render README.md and opt into the full real-HPO stress test
-rdm-real-hpo: install
-	RFASTHPOCR_README_REAL_HPO=true R -e "rmarkdown::render('README.Rmd')" && rm -f README.html
+# backward-compatible alias; README rendering now runs the real-HPO stress test
+rdm-real-hpo: rdm
 
 # build or reuse a cached full real-HPO index
 index-real-hpo: install
-	R -e 'library(RfastHPOCR); cache <- Sys.getenv("RFASTHPOCR_REAL_HPO_DIR", file.path(tools::R_user_dir("RfastHPOCR", "cache"), "real-hpo")); dir.create(cache, recursive = TRUE, showWarnings = FALSE); hp <- file.path(cache, "hp.obo"); if (!file.exists(hp)) hp <- download_hpo_obo(cache); idx_dir <- file.path(cache, "index"); idx <- file.path(idx_dir, "hp.index"); if (!file.exists(idx)) idx <- index_hpo(hp, idx_dir, root_concepts = "HP:0000118", include_top_level_category = TRUE, compress_index = FALSE); print(idx); print(file.info(idx)[, c("size", "mtime")])'
+	R -e 'library(RfastHPOCR); idx <- hpo_real_index(); print(idx); print(file.info(idx)[, c("size", "mtime")])'
 
 # build the pkgdown site into docs/
 site: install

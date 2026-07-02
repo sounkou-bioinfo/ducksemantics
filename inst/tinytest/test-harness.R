@@ -87,14 +87,15 @@ expect_equal(parsed$start_offset, c(0L, 31L))
 expect_equal(parsed$source, c("FastHPOCR", "FastHPOCR"))
 expect_error(hpo_parse_adjudication('{"case_id":"case-1","decisions":[{"candidate_id":"x"}]}'))
 
-mock_runner <- function(prompt) {
+fixture_runner <- function(prompt) {
   out <- response
   attr(out, "usage") <- list(
-    input_tokens = 100L,
-    output_tokens = 50L,
-    total_tokens = 150L,
-    reasoning_tokens = 7L,
-    tool_call_count = 0L
+    input = 100L,
+    output = 50L,
+    totalTokens = 150L,
+    reasoning = 7L,
+    tool_call_count = 0L,
+    cost = list(total = 0.0123)
   )
   out
 }
@@ -102,16 +103,17 @@ mock_runner <- function(prompt) {
 run <- hpo_adjudicate_candidates(
   "Short stature was noted. No seizures were reported.",
   candidates,
-  mock_runner,
-  provider = "mock-provider",
-  model = "mock-model",
+  fixture_runner,
+  provider = "fixture-provider",
+  model = "fixture-model",
   run_id = "run-2"
 )
 expect_equal(nrow(run$adjudication), 2L)
-expect_equal(run$run_log$provider, "mock-provider")
-expect_equal(run$run_log$model, "mock-model")
+expect_equal(run$run_log$provider, "fixture-provider")
+expect_equal(run$run_log$model, "fixture-model")
 expect_equal(run$run_log$input_tokens, 100)
 expect_equal(run$run_log$reasoning_tokens, 7)
+expect_equal(run$run_log$estimated_cost_usd, 0.0123)
 expect_true(run$run_log$parse_success)
 
 bad_run <- hpo_adjudicate_candidates(

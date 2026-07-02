@@ -100,6 +100,6 @@ json <- jsonlite::toJSON(
   ),
   auto_unbox = TRUE
 )
-mock_runner <- function(prompt) json
-hpo_adjudicate_candidates("No seizures were reported.", candidates, mock_runner)$adjudication
+fixture_runner <- function(prompt) json
+hpo_adjudicate_candidates("No seizures were reported.", candidates, fixture_runner)$adjudication
 }
