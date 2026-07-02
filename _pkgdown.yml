@@ -34,6 +34,16 @@ reference:
       - hpo_annotate
       - hpo_write_annotations
       - hpo_print_annotations
+  - title: Hybrid adjudication harness
+    desc: Standardize candidates, prompts, adjudication JSON, and provider comparison logs.
+    contents:
+      - hpo_harness_modes
+      - hpo_candidate_table
+      - hpo_extract_candidates
+      - hpo_adjudication_schema
+      - hpo_adjudication_prompt
+      - hpo_parse_adjudication
+      - hpo_adjudicate_candidates
   - title: Indexing
     desc: Build FastHPOCR indexes from ontology source files.
     contents:
