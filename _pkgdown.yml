@@ -1,0 +1,47 @@
+url: https://sounkou-bioinfo.github.io/RfastHPOCR/
+template:
+  bootstrap: 5
+
+reference:
+  - title: Python environment
+    desc: Configure the reticulate environment used by the bindings.
+    contents:
+      - fast_hpo_cr_install
+      - fast_hpo_cr_available
+      - fast_hpo_cr_config
+      - fast_hpo_cr_use_env
+      - fast_hpo_cr_python_packages
+  - title: Ontology downloads
+    desc: Download and convert ontology source files used by FastHPOCR indexers.
+    contents:
+      - fast_hpo_cr_ontology_urls
+      - download_hpo_obo
+      - download_hpo_resource
+      - download_hpo_json
+      - download_hpo_owl
+      - download_hpo_phenotype_hpoa
+      - download_hpo_genes_to_phenotype
+      - download_hpo_phenotype_to_genes
+      - download_hpo_genes_to_disease
+      - download_mondo_obo
+      - download_orphanet_product1_xml
+      - download_orphanet_product1_json
+      - orphanet_product1_xml_to_json
+  - title: Concept recognition
+    desc: Create annotators, run FastHPOCR, and serialize annotations.
+    contents:
+      - hpo_annotator
+      - hpo_annotate
+      - hpo_write_annotations
+      - hpo_print_annotations
+  - title: Indexing
+    desc: Build FastHPOCR indexes from ontology source files.
+    contents:
+      - hpo_index_config
+      - index_hpo
+      - index_mondo
+      - index_orphanet
+      - index_snomed
+  - title: Package
+    contents:
+      - RfastHPOCR-package

@@ -1,0 +1,34 @@
+Package: RfastHPOCR
+Type: Package
+Title: R Bindings to 'FastHPOCR' Phenotype Concept Recognition
+Version: 0.0.0.9000
+Authors@R: c(
+    person(given = "Sounkou Mahamane", family = "Toure",
+           email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
+    person(given = "Tudor", family = "Groza", role = c("ctb", "cph"),
+           comment = "Author and copyright holder of the upstream 'FastHPOCR' Python package")
+    )
+Description: R bindings to the 'FastHPOCR' Python package
+    <https://github.com/tudorgroza/fast_hpo_cr> for fast phenotype concept
+    recognition over Human Phenotype Ontology terms in free text. The package
+    exposes reticulate-backed helpers for building ontology indexes and for
+    annotating text with R-friendly data-frame outputs while preserving access
+    to the underlying Python objects when needed.
+License: MIT + file LICENSE
+URL: https://github.com/sounkou-bioinfo/RfastHPOCR,
+    https://github.com/tudorgroza/fast_hpo_cr
+BugReports: https://github.com/sounkou-bioinfo/RfastHPOCR/issues
+SystemRequirements: Python (>= 3.8); Python packages FastHPOCR, pronto, and tqdm
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Imports:
+    reticulate (>= 1.41.0),
+    utils
+Suggests:
+    jsonlite,
+    knitr,
+    pkgdown,
+    rmarkdown,
+    tinytest,
+    xml2
