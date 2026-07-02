@@ -442,8 +442,309 @@ run$run_log[, c(
 #>        provider            model             mode input_tokens output_tokens
 #> 1 mock-provider mock-small-model candidates_model          500           160
 #>   reasoning_tokens latency_seconds parse_success
-#> 1                0    1.621246e-05          TRUE
+#> 1                0    1.525879e-05          TRUE
 ```
+
+## Optional real-HPO clinical stress test
+
+The tiny ontology above keeps the ordinary README fast and
+deterministic. For a real HPO smoke test, set
+`RFASTHPOCR_README_REAL_HPO=true` or run `make rdm-real-hpo`. That path
+downloads the real `hp.obo`, builds a real FastHPOCR HPO index under
+`RFASTHPOCR_REAL_HPO_DIR` or a user cache directory, and runs a
+context-heavy clinical note through the same harness primitives.
+
+This is intentionally opt-in because a full HPO index is large and can
+take several minutes to build, but the code below is real executable
+README code, not pseudo-code.
+
+``` r
+real_hpo_dir <- Sys.getenv(
+  "RFASTHPOCR_REAL_HPO_DIR",
+  file.path(tools::R_user_dir("RfastHPOCR", "cache"), "real-hpo")
+)
+dir.create(real_hpo_dir, recursive = TRUE, showWarnings = FALSE)
+
+real_hp_obo <- file.path(real_hpo_dir, "hp.obo")
+if (!file.exists(real_hp_obo)) {
+  real_hp_obo <- download_hpo_obo(real_hpo_dir, quiet = TRUE)
+}
+
+real_index_dir <- file.path(real_hpo_dir, "index")
+real_index <- file.path(real_index_dir, "hp.index")
+if (!file.exists(real_index)) {
+  dir.create(real_index_dir, recursive = TRUE, showWarnings = FALSE)
+  real_index_log <- capture.output({
+    real_index <- index_hpo(
+      real_hp_obo,
+      real_index_dir,
+      root_concepts = "HP:0000118",
+      include_top_level_category = TRUE,
+      compress_index = FALSE
+    )
+  })
+} else {
+  real_index <- normalizePath(real_index, mustWork = TRUE)
+  real_index_log <- "Using cached real HPO index."
+}
+
+data.frame(
+  hp_obo = basename(real_hp_obo),
+  hpo_index = basename(real_index),
+  index_size_mb = round(file.info(real_index)$size / 1024^2, 1),
+  stringsAsFactors = FALSE
+)
+#>   hp_obo hpo_index index_size_mb
+#> 1 hp.obo  hp.index         132.7
+```
+
+``` r
+stress_note <- paste(
+  "The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect.",
+  "He has no seizures, no hypotonia, no ataxia, and no hearing loss. There is no short stature and no microcephaly.",
+  "Family history is notable for a brother with thrombocytosis and autism and a maternal aunt with cardiomyopathy. These findings are not present in the proband.",
+  "Earlier notes described the child as floppy in infancy and not talking yet at 3 years of age. Teachers report that he learns slowly. Parents also describe occasional staring spells.",
+  sep = "\n\n"
+)
+
+real_ann <- hpo_annotator(real_index)
+stress_hits <- hpo_annotate(real_ann, stress_note, longest_match = TRUE)
+stress_candidates <- hpo_candidate_table(
+  stress_hits,
+  case_id = "hpo-stress-001",
+  source = "FastHPOCR-real-HPO"
+)
+
+stress_candidates[, c(
+  "candidate_span", "hpo_id", "hpo_label", "start_offset", "end_offset"
+)]
+#>                candidate_span     hpo_id                   hpo_label
+#> 1  global developmental delay HP:0001263 Developmental delay, global
+#> 2    autism spectrum disorder HP:0000729    Autism spectrum disorder
+#> 3                      autism HP:0000717                      Autism
+#> 4     intellectual disability HP:0001249     Intellectual disability
+#> 5               brachydactyly HP:0001156               Brachydactyly
+#> 6        hypomelanotic macule HP:0009719       Hypomelanotic macules
+#> 7         café-au-lait macule HP:0000957        Cafe-au-lait macules
+#> 8              cardiomyopathy HP:0001638              Cardiomyopathy
+#> 9              cardiomyopathy HP:0001638              Cardiomyopathy
+#> 10      septal cardiac defect HP:0001671         Heart septal defect
+#> 11                   seizures HP:0001250                     Seizure
+#> 12                  hypotonia HP:0001252                   Hypotonia
+#> 13                     ataxia HP:0001251                      Ataxia
+#> 14               hearing loss HP:0000365                Hearing loss
+#> 15              short stature HP:0004322               Short stature
+#> 16               microcephaly HP:0000252                Microcephaly
+#> 17             thrombocytosis HP:0001894              Thrombocytosis
+#>    start_offset end_offset
+#> 1            73         99
+#> 2           101        125
+#> 3           492        498
+#> 4           127        150
+#> 5           152        165
+#> 6           171        191
+#> 7           214        233
+#> 8           269        283
+#> 9           524        538
+#> 10          290        311
+#> 11          324        332
+#> 12          337        346
+#> 13          351        357
+#> 14          366        378
+#> 15          392        405
+#> 16          413        425
+#> 17          473        487
+```
+
+The real HPO candidate layer deliberately captures both true proband
+findings and context traps: negated terms, family-history terms, and
+duplicate mentions. That is exactly why the model layer should produce
+explicit keep/drop decisions with an evidence quote.
+
+``` r
+negated_ids <- c(
+  "HP:0001250", # seizures
+  "HP:0001252", # hypotonia
+  "HP:0001251", # ataxia
+  "HP:0000365", # hearing loss
+  "HP:0004322", # short stature
+  "HP:0000252"  # microcephaly
+)
+
+negated_evidence <- c(
+  "HP:0001250" = "no seizures",
+  "HP:0001252" = "no hypotonia",
+  "HP:0001251" = "no ataxia",
+  "HP:0000365" = "no hearing loss",
+  "HP:0004322" = "no short stature",
+  "HP:0000252" = "no microcephaly"
+)
+
+stress_decision <- function(candidate) {
+  hpo_id <- as.character(candidate$hpo_id)
+  start <- as.integer(candidate$start_offset)
+
+  if (hpo_id %in% negated_ids) {
+    return(list(
+      candidate_id = as.character(candidate$candidate_id),
+      candidate_span = as.character(candidate$candidate_span),
+      normalized_phrase = as.character(candidate$normalized_phrase),
+      hpo_id = hpo_id,
+      hpo_label = as.character(candidate$hpo_label),
+      decision = "drop",
+      support_type = "none",
+      patient_context = "negated",
+      evidence_span = unname(negated_evidence[[hpo_id]]),
+      short_reason = "The note explicitly negates this phenotype for the proband.",
+      replacement_hpo_id = NULL,
+      replacement_hpo_label = NULL,
+      confidence = 1
+    ))
+  }
+
+  family_history <- hpo_id == "HP:0001894" ||
+    (hpo_id == "HP:0000717" && start > 450L) ||
+    (hpo_id == "HP:0001638" && start > 450L)
+
+  if (family_history) {
+    evidence <- if (hpo_id == "HP:0001894") {
+      "brother with thrombocytosis"
+    } else if (hpo_id == "HP:0000717") {
+      "brother with thrombocytosis and autism"
+    } else {
+      "maternal aunt with cardiomyopathy"
+    }
+    return(list(
+      candidate_id = as.character(candidate$candidate_id),
+      candidate_span = as.character(candidate$candidate_span),
+      normalized_phrase = as.character(candidate$normalized_phrase),
+      hpo_id = hpo_id,
+      hpo_label = as.character(candidate$hpo_label),
+      decision = "drop",
+      support_type = "none",
+      patient_context = "family_history",
+      evidence_span = evidence,
+      short_reason = "The evidence is family history and is stated not to be present in the proband.",
+      replacement_hpo_id = NULL,
+      replacement_hpo_label = NULL,
+      confidence = 1
+    ))
+  }
+
+  list(
+    candidate_id = as.character(candidate$candidate_id),
+    candidate_span = as.character(candidate$candidate_span),
+    normalized_phrase = as.character(candidate$normalized_phrase),
+    hpo_id = hpo_id,
+    hpo_label = as.character(candidate$hpo_label),
+    decision = "keep",
+    support_type = "direct",
+    patient_context = "patient",
+    evidence_span = as.character(candidate$candidate_span),
+    short_reason = "The phenotype is directly stated for the proband.",
+    replacement_hpo_id = NULL,
+    replacement_hpo_label = NULL,
+    confidence = 0.95
+  )
+}
+
+stress_response <- jsonlite::toJSON(
+  list(
+    case_id = "hpo-stress-001",
+    decisions = lapply(seq_len(nrow(stress_candidates)), function(i) {
+      stress_decision(stress_candidates[i, , drop = FALSE])
+    })
+  ),
+  auto_unbox = TRUE,
+  null = "null"
+)
+
+stress_runner <- function(prompt) {
+  out <- stress_response
+  attr(out, "usage") <- list(
+    input_tokens = NA_integer_,
+    output_tokens = NA_integer_,
+    total_tokens = NA_integer_,
+    reasoning_tokens = NA_integer_,
+    tool_call_count = 0L
+  )
+  out
+}
+
+stress_run <- hpo_adjudicate_candidates(
+  stress_note,
+  stress_candidates,
+  runner = stress_runner,
+  provider = "expected-output",
+  model = "manual-stress-adjudicator",
+  run_id = "hpo-stress-readme"
+)
+
+stress_run$adjudication[, c(
+  "candidate_span", "hpo_id", "decision", "patient_context",
+  "evidence_span", "short_reason"
+)]
+#>                candidate_span     hpo_id decision patient_context
+#> 1  global developmental delay HP:0001263     keep         patient
+#> 2    autism spectrum disorder HP:0000729     keep         patient
+#> 3                      autism HP:0000717     drop  family_history
+#> 4     intellectual disability HP:0001249     keep         patient
+#> 5               brachydactyly HP:0001156     keep         patient
+#> 6        hypomelanotic macule HP:0009719     keep         patient
+#> 7         café-au-lait macule HP:0000957     keep         patient
+#> 8              cardiomyopathy HP:0001638     keep         patient
+#> 9              cardiomyopathy HP:0001638     drop  family_history
+#> 10      septal cardiac defect HP:0001671     keep         patient
+#> 11                   seizures HP:0001250     drop         negated
+#> 12                  hypotonia HP:0001252     drop         negated
+#> 13                     ataxia HP:0001251     drop         negated
+#> 14               hearing loss HP:0000365     drop         negated
+#> 15              short stature HP:0004322     drop         negated
+#> 16               microcephaly HP:0000252     drop         negated
+#> 17             thrombocytosis HP:0001894     drop  family_history
+#>                             evidence_span
+#> 1              global developmental delay
+#> 2                autism spectrum disorder
+#> 3  brother with thrombocytosis and autism
+#> 4                 intellectual disability
+#> 5                           brachydactyly
+#> 6                    hypomelanotic macule
+#> 7                     café-au-lait macule
+#> 8                          cardiomyopathy
+#> 9       maternal aunt with cardiomyopathy
+#> 10                  septal cardiac defect
+#> 11                            no seizures
+#> 12                           no hypotonia
+#> 13                              no ataxia
+#> 14                        no hearing loss
+#> 15                       no short stature
+#> 16                        no microcephaly
+#> 17            brother with thrombocytosis
+#>                                                                      short_reason
+#> 1                               The phenotype is directly stated for the proband.
+#> 2                               The phenotype is directly stated for the proband.
+#> 3  The evidence is family history and is stated not to be present in the proband.
+#> 4                               The phenotype is directly stated for the proband.
+#> 5                               The phenotype is directly stated for the proband.
+#> 6                               The phenotype is directly stated for the proband.
+#> 7                               The phenotype is directly stated for the proband.
+#> 8                               The phenotype is directly stated for the proband.
+#> 9  The evidence is family history and is stated not to be present in the proband.
+#> 10                              The phenotype is directly stated for the proband.
+#> 11                    The note explicitly negates this phenotype for the proband.
+#> 12                    The note explicitly negates this phenotype for the proband.
+#> 13                    The note explicitly negates this phenotype for the proband.
+#> 14                    The note explicitly negates this phenotype for the proband.
+#> 15                    The note explicitly negates this phenotype for the proband.
+#> 16                    The note explicitly negates this phenotype for the proband.
+#> 17 The evidence is family history and is stated not to be present in the proband.
+```
+
+The optional real-HPO test also shows the boundary between the
+deterministic candidate layer and the model-expansion arms: phrases such
+as “floppy in infancy”, “not talking yet”, “learns slowly”, and “staring
+spells” may require `model_only` or `model_candidates_tools_model` runs
+if we want inferred or paraphrased phenotype recovery.
 
 ## Development
 
@@ -451,9 +752,11 @@ This package follows the same lightweight R package workflow as the
 surrounding packages in this workspace:
 
 ``` sh
-make rd       # roxygen2 docs + NAMESPACE
-make test     # tinytest
-make rdm      # render README.md from README.Rmd
-make site     # pkgdown site
-make check    # R CMD check --as-cran --no-manual
+make rd             # roxygen2 docs + NAMESPACE
+make test           # tinytest
+make index-real-hpo # download/build a cached full HPO index
+make rdm            # render README.md from README.Rmd
+make rdm-real-hpo   # render README.md with the full real-HPO stress test
+make site           # pkgdown site
+make check          # R CMD check --as-cran --no-manual
 ```
