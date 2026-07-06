@@ -95,7 +95,7 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "subject_id TEXT NOT NULL, ",
       "predicate TEXT NOT NULL, ",
       "object_id TEXT, ",
-      "value_json JSON, ",
+      "value_json TEXT, ",
       "decision TEXT NOT NULL, ",
       "confidence DOUBLE, ",
       "evidence JSON, ",
