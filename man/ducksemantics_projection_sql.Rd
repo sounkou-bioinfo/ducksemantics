@@ -20,7 +20,7 @@ ducksemantics_projection_sql(
 
 \item{target_table}{Target table name.}
 
-\item{attrs, trust}{Optional source columns containing JSON.}
+\item{attrs, trust}{Optional source columns containing JSON text.}
 }
 \value{
 A single \code{CREATE OR REPLACE TABLE ... AS SELECT ...} SQL statement.

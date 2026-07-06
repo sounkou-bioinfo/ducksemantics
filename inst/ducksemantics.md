@@ -32,8 +32,8 @@ semantic_nodes(
   family TEXT NOT NULL,
   label TEXT,
   description TEXT,
-  attrs JSON,
-  trust JSON
+  attrs TEXT,
+  trust TEXT
 );
 
 semantic_aliases(
@@ -42,7 +42,7 @@ semantic_aliases(
   alias_kind TEXT NOT NULL,
   source TEXT,
   weight DOUBLE,
-  attrs JSON
+  attrs TEXT
 );
 
 semantic_alias_index(
@@ -51,7 +51,7 @@ semantic_alias_index(
   alias_kind TEXT NOT NULL,
   source TEXT,
   weight DOUBLE,
-  attrs JSON,
+  attrs TEXT,
   normalized_alias TEXT NOT NULL,
   token_count INTEGER NOT NULL
 );
@@ -60,8 +60,8 @@ semantic_edges(
   from_id TEXT NOT NULL,
   predicate TEXT NOT NULL,
   to_id TEXT NOT NULL,
-  attrs JSON,
-  trust JSON
+  attrs TEXT,
+  trust TEXT
 );
 
 semantic_entailed_edges(
@@ -79,8 +79,8 @@ semantic_mentions(
   end_offset INTEGER NOT NULL,
   score DOUBLE,
   method TEXT NOT NULL,
-  attrs JSON,
-  trust JSON
+  attrs TEXT,
+  trust TEXT
 );
 
 semantic_judgments(
@@ -91,10 +91,10 @@ semantic_judgments(
   value_json TEXT,
   decision TEXT NOT NULL,
   confidence DOUBLE,
-  evidence JSON,
+  evidence TEXT,
   model TEXT,
   recorded_at TIMESTAMP,
-  attrs JSON
+  attrs TEXT
 );
 ```
 

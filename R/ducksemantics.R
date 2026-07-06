@@ -21,8 +21,8 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "family TEXT NOT NULL, ",
       "label TEXT, ",
       "description TEXT, ",
-      "attrs JSON, ",
-      "trust JSON",
+      "attrs TEXT, ",
+      "trust TEXT",
       ")"
     ),
     paste0(
@@ -32,7 +32,7 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "alias_kind TEXT NOT NULL, ",
       "source TEXT, ",
       "weight DOUBLE, ",
-      "attrs JSON",
+      "attrs TEXT",
       ")"
     ),
     paste0(
@@ -48,8 +48,8 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "from_id TEXT NOT NULL, ",
       "predicate TEXT NOT NULL, ",
       "to_id TEXT NOT NULL, ",
-      "attrs JSON, ",
-      "trust JSON",
+      "attrs TEXT, ",
+      "trust TEXT",
       ")"
     ),
     paste0(
@@ -85,8 +85,8 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "end_offset INTEGER NOT NULL, ",
       "score DOUBLE, ",
       "method TEXT NOT NULL, ",
-      "attrs JSON, ",
-      "trust JSON",
+      "attrs TEXT, ",
+      "trust TEXT",
       ")"
     ),
     paste0(
@@ -98,10 +98,10 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "value_json TEXT, ",
       "decision TEXT NOT NULL, ",
       "confidence DOUBLE, ",
-      "evidence JSON, ",
+      "evidence TEXT, ",
       "model TEXT, ",
       "recorded_at TIMESTAMP, ",
-      "attrs JSON",
+      "attrs TEXT",
       ")"
     )
   )
@@ -537,7 +537,7 @@ ducksemantics_annotate <- function(conn,
   sql <- paste0(
     "SELECT c.document_id, c.mention_id, a.node_id, c.span, ",
     "c.start_offset, c.end_offset, a.weight AS score, ",
-    "'lexical_alias' AS method, CAST(NULL AS JSON) AS attrs, CAST(NULL AS JSON) AS trust, ",
+    "'lexical_alias' AS method, CAST(NULL AS TEXT) AS attrs, CAST(NULL AS TEXT) AS trust, ",
     "a.alias, a.alias_kind, a.source ",
     "FROM ", ducksemantics_quote_ident(candidate_table), " c ",
     "JOIN ", ducksemantics_quote_ident(tables[["alias_index"]]), " a ",
@@ -968,7 +968,7 @@ ducksemantics_benchmark_metrics <- function(predictions, gold, by = c("node", "s
 #' @param source_table Source table or view name.
 #' @param from,predicate,to Source column names.
 #' @param target_table Target table name.
-#' @param attrs,trust Optional source columns containing JSON.
+#' @param attrs,trust Optional source columns containing JSON text.
 #' @return A single `CREATE OR REPLACE TABLE ... AS SELECT ...` SQL statement.
 #' @export
 ducksemantics_projection_sql <- function(source_table,
