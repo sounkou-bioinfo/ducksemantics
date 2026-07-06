@@ -30,3 +30,6 @@ Suggests:
     jsonlite,
     Rbebelm,
     tinytest
+Remotes:
+    sounkou-bioinfo/Rbebelm,
+    sounkou-bioinfo/s7contract

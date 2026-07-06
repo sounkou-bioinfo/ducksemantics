@@ -36,14 +36,21 @@ reference:
       - ducksemantics_json_judgment_parser
       - ducksemantics_bebel_runner
       - ducksemantics_bebel_embedding_provider
+      - ducksemantics_bebel_tool_judgment_parser
   - title: Model Judgment
     contents:
       - ducksemantics_default_judgment_instructions
       - ducksemantics_judgment_prompt
       - ducksemantics_judge
       - ducksemantics_bebel_judge
+  - title: Ontology Import
+    contents:
+      - ducksemantics_cache_file
+      - ducksemantics_cache_rds
+      - ducksemantics_read_obo
+      - ducksemantics_write_obo
   - title: Benchmarking
     contents:
       - ducksemantics_benchmark_cases
-      - ducksemantics_benchmark_run
+      - ducksemantics_benchmark
       - ducksemantics_benchmark_metrics

@@ -45,10 +45,4 @@ jobs:
           extra-packages: any::rcmdcheck, local::.
           needs: check
 
-      - name: Resolve reticulate Python requirements
-        shell: Rscript {0}
-        run: |
-          library(RfastHPOCR)
-          reticulate::py_config()
-
       - uses: r-lib/actions/check-r-package@v2
