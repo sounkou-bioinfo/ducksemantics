@@ -30,6 +30,13 @@ reference:
       - DucksemanticsEmbeddingQuery
       - DucksemanticsEmbeddingIndexSpec
       - DucksemanticsEmbeddingClusterSpec
+  - title: Value Types
+    contents:
+      - DucksemanticsScalarText
+      - DucksemanticsSqlIdentifier
+      - DucksemanticsDbConnection
+      - DucksemanticsTable
+      - DucksemanticsEmbeddingMatrix
   - title: Grounding
     contents:
       - ducksemantics_normalize

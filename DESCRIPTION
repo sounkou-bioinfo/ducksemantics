@@ -15,7 +15,7 @@ Description: DuckDB-native semantic graph grounding over arbitrary concept
     decisions. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph
     sources, not special package APIs.
 License: MIT + file LICENSE
-URL: https://github.com/sounkou-bioinfo/ducksemantics
+URL: https://github.com/sounkou-bioinfo/ducksemantics, https://sounkou-bioinfo.github.io/ducksemantics
 BugReports: https://github.com/sounkou-bioinfo/ducksemantics/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
