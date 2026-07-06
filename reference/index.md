@@ -1,95 +1,94 @@
 # Package index
 
-## Python environment
+## Graph Store
 
-Configure the reticulate environment used by the bindings.
+- [`ducksemantics_connect()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_connect.md)
+  : Connect to a DuckDB semantic store
+- [`ducksemantics_init()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_init.md)
+  : Initialize semantic graph tables
+- [`ducksemantics_schema_sql()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_schema_sql.md)
+  : DuckDB semantic graph schema
+- [`ducksemantics_tables()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_tables.md)
+  : Semantic graph table names
+- [`ducksemantics_write_graph()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_graph.md)
+  : Write graph rows into the semantic store
+- [`ducksemantics_projection_sql()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_projection_sql.md)
+  : Project any edge-shaped source relation into graph shape
+- [`ducksemantics_closure_sql()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_closure_sql.md)
+  : Materialize transitive edge closure
+- [`ducksemantics_index_stats()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_index_stats.md)
+  : Summarize semantic index size
 
-- [`fast_hpo_cr_install()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_install.md)
-  : Install the Python FastHPOCR dependency set
-- [`fast_hpo_cr_available()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_available.md)
-  : Test whether the FastHPOCR Python module can be imported
-- [`fast_hpo_cr_config()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_config.md)
-  : Show reticulate's active Python configuration
-- [`fast_hpo_cr_use_env()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_use_env.md)
-  : Select a named reticulate environment for FastHPOCR
-- [`fast_hpo_cr_python_packages()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_python_packages.md)
-  : Python packages required by RfastHPOCR
+## Grounding
 
-## Ontology downloads
+- [`ducksemantics_normalize()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_normalize.md)
+  : Normalize text for semantic grounding
+- [`ducksemantics_tokens()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_tokens.md)
+  : Tokenize text for semantic grounding
+- [`ducksemantics_index_aliases()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_index_aliases.md)
+  : Build the lexical alias index
+- [`ducksemantics_annotate()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_annotate.md)
+  : Annotate text against the semantic alias index
+- [`ducksemantics_record_judgments()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_record_judgments.md)
+  : Record semantic judgments
 
-Download and convert ontology source files used by FastHPOCR indexers.
+## Interfaces
 
-- [`fast_hpo_cr_ontology_urls()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/fast_hpo_cr_ontology_urls.md)
-  : Official ontology download URLs used by RfastHPOCR
-- [`download_hpo_obo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_obo.md)
-  [`download_mondo_obo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_obo.md)
-  [`download_orphanet_product1_xml()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_obo.md)
-  [`download_orphanet_product1_json()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_obo.md)
-  : Download ontology source files for FastHPOCR indexing
-- [`download_hpo_resource()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_json()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_owl()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_phenotype_hpoa()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_genes_to_phenotype()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_phenotype_to_genes()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  [`download_hpo_genes_to_disease()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/download_hpo_resource.md)
-  : Download HPO ontology and annotation resources
-- [`orphanet_product1_xml_to_json()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/orphanet_product1_xml_to_json.md)
-  : Convert Orphanet product1 XML to FastHPOCR-compatible JSON
+- [`DucksemanticsAnnotator`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsAnnotator.md)
+  : Structural interface for text annotators
+- [`DucksemanticsPromptRunner`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsPromptRunner.md)
+  : Structural interface for prompt runners
+- [`DucksemanticsJudgmentParser`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsJudgmentParser.md)
+  : Structural interface for judgment parsers
+- [`DucksemanticsEmbeddingProvider`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingProvider.md)
+  : Structural interface for embedding providers
+- [`ducksemantics_run()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
+  [`ducksemantics_embed()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
+  [`ducksemantics_parse()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
+  [`ducksemantics_ground()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
+  : Provider interface generics
+- [`ducksemantics_lexical_annotator()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_lexical_annotator.md)
+  : Create the default DuckDB lexical annotator
+- [`ducksemantics_prompt_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_prompt_runner.md)
+  : Wrap a prompt function as a typed prompt runner
+- [`ducksemantics_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_provider.md)
+  : Wrap an embedding function as a typed embedding provider
+- [`ducksemantics_json_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_json_judgment_parser.md)
+  : Create the default JSON judgment parser
+- [`ducksemantics_bebel_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_runner.md)
+  : Create a BebeLM prompt runner
+- [`ducksemantics_bebel_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_embedding_provider.md)
+  : Create a BebeLM embedding provider
+- [`ducksemantics_bebel_tool_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_tool_judgment_parser.md)
+  : Create a BebeLM tool-call judgment parser
 
-## Concept recognition
+## Model Judgment
 
-Create annotators, run FastHPOCR, and serialize annotations.
+- [`ducksemantics_default_judgment_instructions()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_default_judgment_instructions.md)
+  : Default judgment instructions
+- [`ducksemantics_judgment_prompt()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_judgment_prompt.md)
+  : Build a semantic judgment prompt
+- [`ducksemantics_judge()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_judge.md)
+  : Judge mentions with a model runner
+- [`ducksemantics_bebel_judge()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_judge.md)
+  : Judge mentions with a BebeLM/Rbebelm agent
 
-- [`hpo_annotator()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_annotator.md)
-  : Create a FastHPOCR annotator
-- [`hpo_annotate()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_annotate.md)
-  : Annotate free text with a FastHPOCR index
-- [`hpo_write_annotations()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.md)
-  [`hpo_print_annotations()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_write_annotations.md)
-  : Write or print FastHPOCR annotations
+## Ontology Import
 
-## Hybrid adjudication harness
+- [`ducksemantics_cache_file()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_cache_file.md)
+  : Cache a source file
+- [`ducksemantics_cache_rds()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_cache_rds.md)
+  : Cache an R value on disk
+- [`ducksemantics_read_obo()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_read_obo.md)
+  : Read an OBO ontology into semantic graph rows
+- [`ducksemantics_write_obo()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_obo.md)
+  : Write an OBO ontology into the semantic store
 
-Standardize candidates, prompts, adjudication JSON, and provider
-comparison logs.
+## Benchmarking
 
-- [`hpo_harness_modes()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_harness_modes.md)
-  : List supported HPO extraction harness modes
-- [`hpo_candidate_table()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_candidate_table.md)
-  : Convert FastHPOCR annotations to a harness candidate table
-- [`hpo_extract_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_extract_candidates.md)
-  : Extract FastHPOCR candidate tables for one or more cases
-- [`hpo_adjudication_schema()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_schema.md)
-  : JSON schema for model adjudication of HPO candidates
-- [`hpo_adjudication_prompt()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudication_prompt.md)
-  : Build a prompt for candidate-to-model HPO adjudication
-- [`hpo_parse_adjudication()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_parse_adjudication.md)
-  : Parse model adjudication JSON into a data frame
-- [`hpo_adjudicate_candidates()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_adjudicate_candidates.md)
-  : Run a candidates-to-model adjudication step
-
-## Indexing
-
-Build FastHPOCR indexes from ontology source files.
-
-- [`hpo_index_config()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_index_config.md)
-  : Build a FastHPOCR index configuration list
-- [`hpo_real_index()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/hpo_real_index.md)
-  : Download and build a cached full HPO FastHPOCR index
-- [`index_hpo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_hpo.md)
-  : Build a FastHPOCR HPO index
-- [`index_mondo()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_mondo.md)
-  : Build a FastHPOCR MONDO index
-- [`index_orphanet()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_orphanet.md)
-  : Build a FastHPOCR ORPHANET index
-- [`index_snomed()`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/index_snomed.md)
-  : Build a FastHPOCR SNOMED index
-
-## Package
-
-- [`RfastHPOCR`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/RfastHPOCR-package.md)
-  [`RfastHPOCR-package`](https://sounkou-bioinfo.github.io/RfastHPOCR/reference/RfastHPOCR-package.md)
-  :
-
-  R bindings to `FastHPOCR`
+- [`ducksemantics_benchmark_cases()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_benchmark_cases.md)
+  : Define benchmark cases
+- [`ducksemantics_benchmark()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_benchmark.md)
+  : Run a grounding benchmark
+- [`ducksemantics_benchmark_metrics()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_benchmark_metrics.md)
+  : Compute benchmark precision and recall

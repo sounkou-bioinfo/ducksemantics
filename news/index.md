@@ -1,14 +1,13 @@
 # Changelog
 
-## RfastHPOCR 0.0.0.9000
+## ducksemantics 0.0.0.9000
 
-- Initial reticulate-backed R bindings to the upstream `FastHPOCR`
-  Python package.
-- Added helpers for Python dependency installation, ontology indexing,
-  annotation, and R-friendly annotation serialization.
-- Added hybrid harness primitives for candidate tables, structured
-  adjudication prompts, JSON parsing, provider/model run logs, and
-  token/reasoning-token usage metadata.
-- Added a real-HPO README stress test with a live `piknit` / Pi
-  adjudication call plus an `index-real-hpo` Make target for cached
-  full-HPO indexing.
+- Renamed the package direction to `ducksemantics`.
+- Removed the reticulate/FastHPOCR public API and Python dependency
+  surface.
+- Added DuckDB-native semantic graph tables, alias indexing, lexical
+  mention grounding, graph projection SQL, and transitive closure SQL.
+- Added structural S7 provider interfaces with `s7contract` for
+  annotators, prompt runners, judgment parsers, and embedding providers.
+- Added generic model judgment and benchmark primitives for
+  HPO/MONDO-style grounding tasks.

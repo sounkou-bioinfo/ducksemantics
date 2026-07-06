@@ -5,14 +5,14 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>R Bindings to FastHPOCR Phenotype Concept Recognition • RfastHPOCR</title>
+<title>DuckDB-Native Semantic Graph Grounding • ducksemantics</title>
 <script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="R Bindings to FastHPOCR Phenotype Concept Recognition">
-<meta name="description" content="R bindings to the FastHPOCR Python package &lt;https://github.com/tudorgroza/fast_hpo_cr&gt; for fast phenotype concept recognition over Human Phenotype Ontology terms in free text. The package exposes reticulate-backed helpers for building ontology indexes and for annotating text with R-friendly data-frame outputs while preserving access to the underlying Python objects when needed.">
-<meta property="og:description" content="R bindings to the FastHPOCR Python package &lt;https://github.com/tudorgroza/fast_hpo_cr&gt; for fast phenotype concept recognition over Human Phenotype Ontology terms in free text. The package exposes reticulate-backed helpers for building ontology indexes and for annotating text with R-friendly data-frame outputs while preserving access to the underlying Python objects when needed.">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="DuckDB-Native Semantic Graph Grounding">
+<meta name="description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, and BebeLM-compatible judgment prompts for enrichment, negation, uncertainty, and provenance-bearing decisions. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
+<meta property="og:description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, and BebeLM-compatible judgment prompts for enrichment, negation, uncertainty, and provenance-bearing decisions. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -20,7 +20,7 @@
 
     <nav class="navbar navbar-expand-lg fixed-top bg-light" data-bs-theme="light" aria-label="Site navigation"><div class="container">
 
-    <a class="navbar-brand me-2" href="index.html">RfastHPOCR</a>
+    <a class="navbar-brand me-2" href="index.html">ducksemantics</a>
 
     <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
 
@@ -38,7 +38,7 @@
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/RfastHPOCR/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/ducksemantics/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -47,451 +47,202 @@
 </nav><div class="container template-home">
 <div class="row">
   <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="rfasthpocr">RfastHPOCR<a class="anchor" aria-label="anchor" href="#rfasthpocr"></a>
+<div class="page-header"><h1 id="ducksemantics">ducksemantics<a class="anchor" aria-label="anchor" href="#ducksemantics"></a>
 </h1></div>
-<!-- badges: start -->
-
-<p><code>RfastHPOCR</code> is a reticulate-backed R binding to Tudor Groza’s <a href="https://github.com/tudorgroza/fast_hpo_cr" class="external-link"><code>FastHPOCR</code></a> Python package for fast concept recognition over Human Phenotype Ontology terms in free text.</p>
-<p>The package keeps the upstream Python implementation as the execution engine and adds R-oriented helpers for:</p>
-<ul>
-<li>declaring and installing the Python dependency set (<code>FastHPOCR</code>, <code>pronto</code>, and <code>tqdm</code>),</li>
-<li>downloading ontology source files,</li>
-<li>building HPO, MONDO, ORPHANET, and SNOMED indexes,</li>
-<li>loading a FastHPOCR annotator from an index file, and</li>
-<li>converting annotation objects to R data frames with explicit offset columns.</li>
-</ul>
-<div class="section level2">
-<h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
-</h2>
-<p>Install from GitHub with <code>remotes::install_github("sounkou-bioinfo/RfastHPOCR")</code>.</p>
-<p>For ordinary use, <code>RfastHPOCR</code> follows current reticulate package practice: <code><a href="https://github.com/sounkou-bioinfo/RfastHPOCR" class="external-link">library(RfastHPOCR)</a></code> declares the Python requirements with <code><a href="https://rstudio.github.io/reticulate/reference/py_require.html" class="external-link">reticulate::py_require()</a></code>, and reticulate can resolve them in an ephemeral virtual environment when Python is first initialized.</p>
+<p><code>ducksemantics</code> is a DuckDB-native semantic graph and grounding package for R. The package owns the graph schema, OBO import, alias indexing, mention grounding, provider interfaces, model judgment, and benchmark measurement.</p>
+<p>HPO and MONDO are first-class graph sources here, but they are not the whole abstraction. The same tables can hold ORPHANET, study notes, pi-bio-agent memory edges, run ledgers, and local concept maps. BebeLM/Rbebelm is the bundled on-device provider for CPU embedding and judgment; other providers implement the same S7 generics.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/RfastHPOCR" class="external-link">RfastHPOCR</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/fast_hpo_cr_python_packages.html">fast_hpo_cr_python_packages</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "FastHPOCR&gt;=0.1.4" "pronto"           "tqdm"</span></span>
-<span><span class="fu"><a href="reference/fast_hpo_cr_available.html">fast_hpo_cr_available</a></span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p><code>FastHPOCR</code> 0.1.4 on PyPI does not currently declare all runtime dependencies, so <code>RfastHPOCR</code> requests <code>pronto</code> and <code>tqdm</code> explicitly.</p>
-<p>If you prefer a persistent named environment, create it and select it before Python is initialized:</p>
-<p>For a persistent environment, run <code>fast_hpo_cr_install(envname = "r-fast-hpo-cr", method = "virtualenv")</code>, restart R, and then call <code>fast_hpo_cr_use_env("r-fast-hpo-cr", method = "virtualenv")</code> before the first Python import.</p>
-<p>To install from the upstream GitHub repository instead of PyPI:</p>
-<p>To install the Python dependency from the upstream GitHub repository instead of PyPI, use <code>fast_hpo_cr_install(source = "github", ref = "main")</code>.</p>
-<p>If Python was already initialized before selecting or installing an environment, restart R so reticulate can bind to the intended environment.</p>
-</div>
-<div class="section level2">
-<h2 id="ontology-downloads">Ontology downloads<a class="anchor" aria-label="anchor" href="#ontology-downloads"></a>
-</h2>
-<p>HPO is the primary target. HPO release assets are published at <a href="https://github.com/obophenotype/human-phenotype-ontology/releases" class="external-link uri">https://github.com/obophenotype/human-phenotype-ontology/releases</a>. The <code>hp.obo</code> helper uses the stable OBO PURL and is the source file used by FastHPOCR’s HPO indexer. Additional HPO JSON, OWL, HPOA, and gene/phenotype tables are exposed for validation and audit workflows.</p>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link">ducksemantics</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rbebelm" class="external-link">Rbebelm</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">cache_dir</span> <span class="op">&lt;-</span> <span class="fu">tools</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/tools/userdir.html" class="external-link">R_user_dir</a></span><span class="op">(</span><span class="st">"ducksemantics"</span>, <span class="st">"cache"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">ontology_files</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  HPO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_cache_file.html">ducksemantics_cache_file</a></span><span class="op">(</span></span>
+<span>    <span class="st">"https://purl.obolibrary.org/obo/hp.obo"</span>,</span>
+<span>    <span class="st">"hp.obo"</span>,</span>
+<span>    cache_dir <span class="op">=</span> <span class="va">cache_dir</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  MONDO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_cache_file.html">ducksemantics_cache_file</a></span><span class="op">(</span></span>
+<span>    <span class="st">"https://purl.obolibrary.org/obo/mondo.obo"</span>,</span>
+<span>    <span class="st">"mondo.obo"</span>,</span>
+<span>    cache_dir <span class="op">=</span> <span class="va">cache_dir</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">weights_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span></span>
+<span>  <span class="st">"BEBELM_WEIGHTS_FILE"</span>,</span>
+<span>  <span class="st">"/root/bebelm/LFM2.5-8B-A1B-Q4_K_M.gguf"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">weights_file</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>The OBO parser produces the graph rows that DuckDB stores and indexes.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/fast_hpo_cr_ontology_urls.html">fast_hpo_cr_ontology_urls</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"^hpo_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="fu"><a href="reference/fast_hpo_cr_ontology_urls.html">fast_hpo_cr_ontology_urls</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                                                             hpo_obo </span></span>
-<span><span class="co">#&gt;                            "https://purl.obolibrary.org/obo/hp.obo" </span></span>
-<span><span class="co">#&gt;                                                            hpo_json </span></span>
-<span><span class="co">#&gt;                           "https://purl.obolibrary.org/obo/hp.json" </span></span>
-<span><span class="co">#&gt;                                                             hpo_owl </span></span>
-<span><span class="co">#&gt;                            "https://purl.obolibrary.org/obo/hp.owl" </span></span>
-<span><span class="co">#&gt;                                                  hpo_phenotype_hpoa </span></span>
-<span><span class="co">#&gt;            "https://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa" </span></span>
-<span><span class="co">#&gt;                                              hpo_genes_to_phenotype </span></span>
-<span><span class="co">#&gt;    "https://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt" </span></span>
-<span><span class="co">#&gt;                                              hpo_phenotype_to_genes </span></span>
-<span><span class="co">#&gt;    "https://purl.obolibrary.org/obo/hp/hpoa/phenotype_to_genes.txt" </span></span>
-<span><span class="co">#&gt;                                                hpo_genes_to_disease </span></span>
-<span><span class="co">#&gt;      "https://purl.obolibrary.org/obo/hp/hpoa/genes_to_disease.txt" </span></span>
-<span><span class="co">#&gt;                                                       hpo_data_page </span></span>
-<span><span class="co">#&gt; "https://github.com/obophenotype/human-phenotype-ontology/releases"</span></span></code></pre></div>
-<p>For a real HPO analysis, use <code>download_hpo_obo("ontologies")</code> to fetch the indexing source, plus optional audit resources such as <code><a href="reference/download_hpo_resource.html">download_hpo_json()</a></code>, <code><a href="reference/download_hpo_resource.html">download_hpo_phenotype_hpoa()</a></code>, and <code><a href="reference/download_hpo_resource.html">download_hpo_genes_to_phenotype()</a></code>.</p>
-<p>MONDO and Orphanet download helpers are present for the other upstream FastHPOCR indexers, but they are not the focus of this package. MONDO release assets are published at <a href="https://github.com/monarch-initiative/mondo/releases" class="external-link uri">https://github.com/monarch-initiative/mondo/releases</a>.</p>
-<p>The rest of this README is not a pseudo API sketch: it creates a tiny HPO-style OBO file, runs the same HPO download helper through a local file source, indexes it multiple ways with the Python FastHPOCR engine, annotates text, and writes the annotation table. The local file source keeps README rendering fast and network-independent while still exercising the real download, indexing, re-indexing, annotation, and serialization code paths.</p>
-</div>
-<div class="section level2">
-<h2 id="end-to-end-hpo-indexing-and-annotation">End-to-end HPO indexing and annotation<a class="anchor" aria-label="anchor" href="#end-to-end-hpo-indexing-and-annotation"></a>
-</h2>
-<p>Create a tiny HPO-like ontology fixture. It contains the HPO root needed by FastHPOCR (<code>HP:0000118</code>), two top-level abnormality categories, and two concrete phenotype terms.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">work_dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"RfastHPOCR-readme"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">work_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">work_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">source_obo</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"source-hp.obo"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"format-version: 1.2"</span>,</span>
-<span>  <span class="st">"ontology: hp"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0000001"</span>,</span>
-<span>  <span class="st">"name: All"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0000118"</span>,</span>
-<span>  <span class="st">"name: Phenotypic abnormality"</span>,</span>
-<span>  <span class="st">"is_a: HP:0000001 ! All"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0000119"</span>,</span>
-<span>  <span class="st">"name: Abnormality of the genitourinary system"</span>,</span>
-<span>  <span class="st">"is_a: HP:0000118 ! Phenotypic abnormality"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0000707"</span>,</span>
-<span>  <span class="st">"name: Abnormality of the nervous system"</span>,</span>
-<span>  <span class="st">"is_a: HP:0000118 ! Phenotypic abnormality"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0004322"</span>,</span>
-<span>  <span class="st">"name: Short stature"</span>,</span>
-<span>  <span class="st">"synonym: \"short height\" EXACT []"</span>,</span>
-<span>  <span class="st">"is_a: HP:0000119 ! Abnormality of the genitourinary system"</span>,</span>
-<span>  <span class="st">""</span>,</span>
-<span>  <span class="st">"[Term]"</span>,</span>
-<span>  <span class="st">"id: HP:0001250"</span>,</span>
-<span>  <span class="st">"name: Seizure"</span>,</span>
-<span>  <span class="st">"synonym: \"seizures\" EXACT []"</span>,</span>
-<span>  <span class="st">"is_a: HP:0000707 ! Abnormality of the nervous system"</span></span>
-<span><span class="op">)</span>, <span class="va">source_obo</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">hp_obo</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/download_hpo_obo.html">download_hpo_obo</a></span><span class="op">(</span></span>
-<span>  dest_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"downloads"</span><span class="op">)</span>,</span>
-<span>  url <span class="op">=</span> <span class="va">source_obo</span>,</span>
-<span>  quiet <span class="op">=</span> <span class="cn">TRUE</span></span>
+<code class="sourceCode R"><span><span class="va">graphs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  HPO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="va">ontology_files</span><span class="op">[[</span><span class="st">"HPO"</span><span class="op">]</span><span class="op">]</span>, family <span class="op">=</span> <span class="st">"HPO"</span>, source <span class="op">=</span> <span class="st">"hp.obo"</span><span class="op">)</span>,</span>
+<span>  MONDO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="va">ontology_files</span><span class="op">[[</span><span class="st">"MONDO"</span><span class="op">]</span><span class="op">]</span>, family <span class="op">=</span> <span class="st">"MONDO"</span>, source <span class="op">=</span> <span class="st">"mondo.obo"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="va">hp_obo</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "hp.obo"</span></span></code></pre></div>
-<p>Index both concrete phenotype branches and annotate a sentence.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">index_all_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">index_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-all"</span><span class="op">)</span>,</span>
-<span>    root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
-<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_all_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] " - Collected 2 terms."     " - Indexing HPO terms ..."</span></span>
-<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">index_all</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] TRUE</span></span>
-<span></span>
-<span><span class="va">ann_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">index_all</span><span class="op">)</span></span>
-<span><span class="va">hits_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span></span>
-<span>  <span class="va">ann_all</span>,</span>
-<span>  <span class="st">"The patient has short stature and seizures."</span>,</span>
-<span>  longest_match <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">hits_all</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"id"</span>, <span class="st">"label"</span>, <span class="st">"start"</span>, <span class="st">"end"</span>, <span class="st">"start_offset"</span>, <span class="st">"end_offset"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;            span         id         label start end start_offset end_offset</span></span>
-<span><span class="co">#&gt; 1 short stature HP:0004322 Short stature    17  29           16         29</span></span>
-<span><span class="co">#&gt; 2      seizures HP:0001250      seizures    35  42           34         42</span></span></code></pre></div>
-<p>Re-index the same ontology restricted to the nervous-system branch. This is a real second FastHPOCR indexing pass; the genitourinary <code>Short stature</code> term is not present in this restricted index.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">index_neuro_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">index_neuro</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-neuro"</span><span class="op">)</span>,</span>
-<span>    root_concepts <span class="op">=</span> <span class="st">"HP:0000707"</span>,</span>
-<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_neuro_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] " - Collected 1 terms."     " - Indexing HPO terms ..."</span></span>
-<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
-<span></span>
-<span><span class="va">ann_neuro</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">index_neuro</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span></span>
-<span>  <span class="va">ann_neuro</span>,</span>
-<span>  <span class="st">"The patient has short stature and seizures."</span>,</span>
-<span>  longest_match <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"id"</span>, <span class="st">"label"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;       span         id    label</span></span>
-<span><span class="co">#&gt; 1 seizures HP:0001250 seizures</span></span></code></pre></div>
-<p>Re-index again with an external synonym file. The phrase <code>small stature</code> is not in the tiny OBO file; it comes from the external synonym file passed through to FastHPOCR.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">syn_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"external-synonyms.txt"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="st">"HP:0004322=small stature"</span>, <span class="va">syn_file</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">index_external_log</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/capture.output.html" class="external-link">capture.output</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="va">index_external</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/index_hpo.html">index_hpo</a></span><span class="op">(</span></span>
-<span>    hpo_file <span class="op">=</span> <span class="va">hp_obo</span>,</span>
-<span>    output_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"index-external"</span><span class="op">)</span>,</span>
-<span>    root_concepts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0000119"</span>, <span class="st">"HP:0000707"</span><span class="op">)</span>,</span>
-<span>    external_syn_file <span class="op">=</span> <span class="va">syn_file</span>,</span>
-<span>    include_top_level_category <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>    compress_index <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"Collected|Indexing HPO terms|Serializing index"</span>, <span class="va">index_external_log</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] " - Collected 2 terms."     " - Indexing HPO terms ..."</span></span>
-<span><span class="co">#&gt; [3] " - Serializing index ..."</span></span>
-<span></span>
-<span><span class="va">ann_external</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">index_external</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">ann_external</span>, <span class="st">"Small stature was noted."</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"id"</span>, <span class="st">"label"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;            span         id         label</span></span>
-<span><span class="co">#&gt; 1 Small stature HP:0004322 small stature</span></span></code></pre></div>
-<p>Serialize the R annotation table with the same tab-separated shape used by the upstream Python package.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">out_tsv</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">work_dir</span>, <span class="st">"annotations.tsv"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/hpo_write_annotations.html">hpo_write_annotations</a></span><span class="op">(</span><span class="va">hits_all</span>, <span class="va">out_tsv</span>, include_categories <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines</a></span><span class="op">(</span><span class="va">out_tsv</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "[16:29]\tHP:0004322\tShort stature\tshort stature\t[HP:0000119 (Abnormality of the genitourinary system)]"</span></span>
-<span><span class="co">#&gt; [2] "[34:42]\tHP:0001250\tseizures\tseizures\t[HP:0000707 (Abnormality of the nervous system)]"</span></span></code></pre></div>
-</div>
-<div class="section level2">
-<h2 id="role-in-the-hybrid-hpo-extraction-pipeline">Role in the hybrid HPO extraction pipeline<a class="anchor" aria-label="anchor" href="#role-in-the-hybrid-hpo-extraction-pipeline"></a>
-</h2>
-<p>The intended split is:</p>
-<ul>
-<li>
-<strong>FastHPOCR</strong>: deterministic extractor/linker baseline for explicit phenotype mentions.</li>
-<li>
-<strong>Small local model</strong>: phrase cleanup, paraphrase normalization, and candidate phenotype suggestions.</li>
-<li>
-<strong>piknit / Pi</strong>: auditable orchestration in R Markdown or Quarto, including local tool calls, model calls, and report generation. See <a href="https://github.com/sounkou-bioinfo/piknit" class="external-link uri">https://github.com/sounkou-bioinfo/piknit</a>.</li>
-</ul>
-<p>In that design this package owns the deterministic FastHPOCR lane: text in, candidate HPO rows out, with provenance and offsets preserved.</p>
-</div>
-<div class="section level2">
-<h2 id="hybrid-adjudication-harness-primitives">Hybrid adjudication harness primitives<a class="anchor" aria-label="anchor" href="#hybrid-adjudication-harness-primitives"></a>
-</h2>
-<p>The package now also provides the small, model-agnostic pieces needed to compare hybrid configurations without making <code>RfastHPOCR</code> depend on any one LLM provider. The main practical arm is:</p>
-<pre class="text"><code>note + FastHPOCR candidates -&gt; model keep/drop adjudication</code></pre>
-<p>FastHPOCR still generates deterministic candidates. The model is asked only for short auditable fields: <code>decision</code>, <code>evidence_span</code>, and <code>short_reason</code>. Reasoning-token counts, when a provider exposes them, are stored only as run metadata.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">review_text</span> <span class="op">&lt;-</span> <span class="st">"Short stature was noted. No seizures were reported."</span></span>
-<span><span class="va">review_hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">ann_all</span>, <span class="va">review_text</span>, longest_match <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">review_candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_candidate_table.html">hpo_candidate_table</a></span><span class="op">(</span><span class="va">review_hits</span>, case_id <span class="op">=</span> <span class="st">"readme-case-001"</span><span class="op">)</span></span>
-<span><span class="va">review_candidates</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"candidate_id"</span>, <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"hpo_label"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;           case_id         candidate_id candidate_span     hpo_id     hpo_label</span></span>
-<span><span class="co">#&gt; 1 readme-case-001 readme-case-001:0001  Short stature HP:0004322 Short stature</span></span>
-<span><span class="co">#&gt; 2 readme-case-001 readme-case-001:0002       seizures HP:0001250      seizures</span></span></code></pre></div>
-<p>The harness modes are explicit so that <code>tool_only</code>, <code>model_only</code>, and hybrid arms can be compared with the same term-level schema.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/hpo_harness_modes.html">hpo_harness_modes</a></span><span class="op">(</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mode"</span>, <span class="st">"question"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                           mode</span></span>
-<span><span class="co">#&gt; 1                    tool_only</span></span>
-<span><span class="co">#&gt; 2                   model_only</span></span>
-<span><span class="co">#&gt; 3            model_tools_model</span></span>
-<span><span class="co">#&gt; 4 model_candidates_tools_model</span></span>
-<span><span class="co">#&gt; 5             candidates_model</span></span>
-<span><span class="co">#&gt; 6       candidates_tools_model</span></span>
-<span><span class="co">#&gt;                                                                  question</span></span>
-<span><span class="co">#&gt; 1                              What is the deterministic FastHPOCR floor?</span></span>
-<span><span class="co">#&gt; 2              Can the model extract and map HPO terms without grounding?</span></span>
-<span><span class="co">#&gt; 3                       Does ontology grounding fix model mapping errors?</span></span>
-<span><span class="co">#&gt; 4 Does model-generated candidate expansion plus grounding improve recall?</span></span>
-<span><span class="co">#&gt; 5                 Does model cleanup fix FastHPOCR context noise cheaply?</span></span>
-<span><span class="co">#&gt; 6 Does ontology validation after candidate generation add useful hygiene?</span></span></code></pre></div>
-<p>The prompt embeds the candidate rows and a strict JSON schema. The README prints only the beginning of the prompt to keep the rendered document short.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">prompt</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_adjudication_prompt.html">hpo_adjudication_prompt</a></span><span class="op">(</span><span class="va">review_text</span>, <span class="va">review_candidates</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/strsplit.html" class="external-link">strsplit</a></span><span class="op">(</span><span class="va">prompt</span>, <span class="st">"\n"</span>, fixed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="fl">16</span><span class="op">)</span>, collapse <span class="op">=</span> <span class="st">"\n"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; You are adjudicating candidate Human Phenotype Ontology (HPO) extractions from de-identified clinical text.</span></span>
-<span><span class="co">#&gt; Return only valid JSON matching the schema. Do not include markdown fences or explanatory prose outside JSON.</span></span>
-<span><span class="co">#&gt; Do not provide hidden chain-of-thought. The clinical audit fields are decision, evidence_span, and short_reason.</span></span>
-<span><span class="co">#&gt; Reasoning-token counts, if available from the API, are run metadata and are not a clinical audit field.</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Prompt version: rfasthpocr-candidates-model-v1</span></span>
-<span><span class="co">#&gt; Case id: readme-case-001</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Decision rules:</span></span>
-<span><span class="co">#&gt; - Return exactly one decision for each supplied candidate_id.</span></span>
-<span><span class="co">#&gt; - decision = 'keep' only if the phenotype is present for the patient in the note.</span></span>
-<span><span class="co">#&gt; - decision = 'drop' if the mention is negated, family-history-only, uncertain/not established, not about the patient, too generic, duplicated by a more specific kept candidate, or unsupported.</span></span>
-<span><span class="co">#&gt; - patient_context must be one of: patient, family_history, negated, uncertain.</span></span>
-<span><span class="co">#&gt; - evidence_span should be the shortest exact quote from the note that supports the decision, including negation or family-history wording when relevant.</span></span>
-<span><span class="co">#&gt; - short_reason should be one concise sentence; do not include chain-of-thought.</span></span>
-<span><span class="co">#&gt; - If the supplied HPO term is wrong but a better HPO term is obvious from the same evidence, keep decision='drop' and fill replacement_hpo_id/replacement_hpo_label.</span></span></code></pre></div>
-<p>A live model response is expected to be JSON. The real <code>piknit</code> / Pi call is shown in the full-HPO stress test below; no hand-written adjudication response is used in this README.</p>
-</div>
-<div class="section level2">
-<h2 id="real-hpo-clinical-stress-test">Real-HPO clinical stress test<a class="anchor" aria-label="anchor" href="#real-hpo-clinical-stress-test"></a>
-</h2>
-<p>The tiny ontology above keeps the basic FastHPOCR example fast, but the real harness should also be exercised against the current full HPO. The helper below downloads <code>hp.obo</code> and builds a cached FastHPOCR index under <code>RFASTHPOCR_REAL_HPO_DIR</code> or the R user cache directory. A fresh full-HPO build can take several minutes; subsequent renders reuse the index.</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">real_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_real_index.html">hpo_real_index</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  hp_obo <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">real_index</span>, <span class="st">"hpo_file"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  hpo_index <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/basename.html" class="external-link">basename</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span>,</span>
-<span>  index_size_mb <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.info.html" class="external-link">file.info</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span><span class="op">$</span><span class="va">size</span> <span class="op">/</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span>, <span class="fl">1</span><span class="op">)</span>,</span>
+<span>  source <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">graphs</span><span class="op">)</span>,</span>
+<span>  nodes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">nodes</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  aliases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">aliases</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  edges <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">edges</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  row.names <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;   source nodes aliases  edges</span></span>
+<span><span class="co">#&gt; 1    HPO 19836   46065  24378</span></span>
+<span><span class="co">#&gt; 2  MONDO 56273  149279 115738</span></span></code></pre></div>
+<p>The database below is rebuilt from those full ontologies, then indexed once for lexical grounding.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">db_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme.duckdb"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">db_path</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="va">db_path</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
+<span>  <span class="va">conn</span>,</span>
+<span>  nodes <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">nodes</span>,</span>
+<span>  aliases <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">aliases</span>,</span>
+<span>  edges <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">edges</span>,</span>
+<span>  replace <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
+<span>  <span class="va">conn</span>,</span>
+<span>  nodes <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">nodes</span>,</span>
+<span>  aliases <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">aliases</span>,</span>
+<span>  edges <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">edges</span>,</span>
+<span>  index <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/ducksemantics_index_stats.html">ducksemantics_index_stats</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span><span class="op">$</span><span class="va">tables</span></span>
+<span><span class="co">#&gt;                     table row_count</span></span>
+<span><span class="co">#&gt; 1          semantic_nodes     71333</span></span>
+<span><span class="co">#&gt; 2        semantic_aliases    195344</span></span>
+<span><span class="co">#&gt; 3    semantic_alias_index    195344</span></span>
+<span><span class="co">#&gt; 4          semantic_edges    140110</span></span>
+<span><span class="co">#&gt; 5 semantic_entailed_edges         0</span></span>
+<span><span class="co">#&gt; 6       semantic_mentions         0</span></span>
+<span><span class="co">#&gt; 7      semantic_judgments         0</span></span></code></pre></div>
+<p>Grounding returns deterministic candidates with source provenance. The diabetes mention is deliberately negated; the lexical layer should surface it, and the judgment layer should decide whether it belongs in the patient phenotype.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">note</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
+<span>  <span class="st">"The proband presents with global developmental delay, seizures,"</span>,</span>
+<span>  <span class="st">"short stature, cardiomyopathy, and no diabetes mellitus."</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_annotate.html">ducksemantics_annotate</a></span><span class="op">(</span><span class="va">conn</span>, <span class="va">note</span>, document_id <span class="op">=</span> <span class="st">"readme-case-001"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">mentions</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"node_id"</span>, <span class="st">"alias_kind"</span>, <span class="st">"source"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                          span       node_id    alias_kind    source</span></span>
+<span><span class="co">#&gt; 1  global developmental delay    HP:0001263         label    hp.obo</span></span>
+<span><span class="co">#&gt; 2                    seizures    HP:0001250 synonym:exact    hp.obo</span></span>
+<span><span class="co">#&gt; 3               short stature    HP:0004322         label    hp.obo</span></span>
+<span><span class="co">#&gt; 4               short stature    HP:0004322 synonym:exact    hp.obo</span></span>
+<span><span class="co">#&gt; 5               short stature    HP:0004322         label mondo.obo</span></span>
+<span><span class="co">#&gt; 6              cardiomyopathy    HP:0001638         label    hp.obo</span></span>
+<span><span class="co">#&gt; 7              cardiomyopathy    HP:0001638         label mondo.obo</span></span>
+<span><span class="co">#&gt; 8              cardiomyopathy MONDO:0004994         label mondo.obo</span></span>
+<span><span class="co">#&gt; 9              cardiomyopathy MONDO:0004994 synonym:exact mondo.obo</span></span>
+<span><span class="co">#&gt; 10          diabetes mellitus    HP:0000819         label    hp.obo</span></span>
+<span><span class="co">#&gt; 11          diabetes mellitus    HP:0000819         label mondo.obo</span></span>
+<span><span class="co">#&gt; 12          diabetes mellitus MONDO:0005015         label mondo.obo</span></span>
+<span><span class="co">#&gt; 13          diabetes mellitus MONDO:0005015 synonym:exact mondo.obo</span></span></code></pre></div>
+<p>The BebeLM bridge is typed as an embedding provider. The vectors below come from the local GGUF model and are cached as RDS because they are deterministic for the same model and pooling configuration.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sounkou-bioinfo.github.io/Rbebelm/reference/bebel_model_load.html" class="external-link">bebel_model_load</a></span><span class="op">(</span><span class="va">weights_file</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">embedding_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_embedding_provider.html">ducksemantics_bebel_embedding_provider</a></span><span class="op">(</span><span class="va">model</span>, pooling <span class="op">=</span> <span class="st">"mean"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">embedding_terms</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"global developmental delay"</span>,</span>
+<span>  <span class="st">"seizures"</span>,</span>
+<span>  <span class="st">"short stature"</span>,</span>
+<span>  <span class="st">"cardiomyopathy"</span>,</span>
+<span>  <span class="st">"diabetes mellitus"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">embeddings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-embeddings.rds"</span><span class="op">)</span>,</span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="fu"><a href="reference/ducksemantics_provider_generics.html">ducksemantics_embed</a></span><span class="op">(</span><span class="va">embedding_provider</span>, <span class="va">embedding_terms</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  terms <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">)</span>,</span>
+<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">)</span>,</span>
+<span>  first_row_l2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span> <span class="op">^</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt;   terms dimensions first_row_l2</span></span>
+<span><span class="co">#&gt; 1     5       2048            1</span></span></code></pre></div>
+<p>BebeLM judgment uses the same provider interface. The parser here accepts BebeLM tool calls and JSON judgment payloads, then returns the rows expected by the semantic store.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">judgment_mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>  mention_id <span class="op">=</span> <span class="st">"readme-judgment:000001"</span>,</span>
+<span>  node_id <span class="op">=</span> <span class="st">"HP:0004322"</span>,</span>
+<span>  span <span class="op">=</span> <span class="st">"short stature"</span>,</span>
+<span>  start_offset <span class="op">=</span> <span class="fl">26L</span>,</span>
+<span>  end_offset <span class="op">=</span> <span class="fl">39L</span>,</span>
+<span>  score <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  alias <span class="op">=</span> <span class="st">"short stature"</span>,</span>
+<span>  alias_kind <span class="op">=</span> <span class="st">"label"</span>,</span>
+<span>  source <span class="op">=</span> <span class="st">"hp.obo"</span>,</span>
 <span>  stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt;   hp_obo hpo_index index_size_mb</span></span>
-<span><span class="co">#&gt; 1 hp.obo  hp.index         132.7</span></span></code></pre></div>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">stress_note</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
-<span>  <span class="st">"The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect."</span>,</span>
-<span>  <span class="st">"He has no seizures, no hypotonia, no ataxia, and no hearing loss. There is no short stature and no microcephaly."</span>,</span>
-<span>  <span class="st">"Family history is notable for a brother with thrombocytosis and autism and a maternal aunt with cardiomyopathy. These findings are not present in the proband."</span>,</span>
-<span>  <span class="st">"Earlier notes described the child as floppy in infancy and not talking yet at 3 years of age. Teachers report that he learns slowly. Parents also describe occasional staring spells."</span>,</span>
-<span>  sep <span class="op">=</span> <span class="st">"\n\n"</span></span>
+<span></span>
+<span><span class="va">judgment_instructions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
+<span>  <span class="st">"You adjudicate deterministic semantic grounding candidates."</span>,</span>
+<span>  <span class="st">"Return only JSON: an array of objects with mention_id, decision, confidence, evidence_span, short_reason."</span>,</span>
+<span>  <span class="st">"Use keep for a supported patient finding. Never invent identifiers."</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">real_ann</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotator.html">hpo_annotator</a></span><span class="op">(</span><span class="va">real_index</span><span class="op">)</span></span>
-<span><span class="va">stress_hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_annotate.html">hpo_annotate</a></span><span class="op">(</span><span class="va">real_ann</span>, <span class="va">stress_note</span>, longest_match <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">stress_candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_candidate_table.html">hpo_candidate_table</a></span><span class="op">(</span></span>
-<span>  <span class="va">stress_hits</span>,</span>
-<span>  case_id <span class="op">=</span> <span class="st">"hpo-stress-001"</span>,</span>
-<span>  source <span class="op">=</span> <span class="st">"FastHPOCR-real-HPO"</span></span>
+<span><span class="va">judgment</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-judgment.rds"</span><span class="op">)</span>,</span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sounkou-bioinfo.github.io/Rbebelm/reference/bebel_agent.html" class="external-link">bebel_agent</a></span><span class="op">(</span><span class="va">model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">96</span>, max_think <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="reference/ducksemantics_bebel_judge.html">ducksemantics_bebel_judge</a></span><span class="op">(</span></span>
+<span>      <span class="va">agent</span>,</span>
+<span>      <span class="st">"The proband presents with short stature."</span>,</span>
+<span>      <span class="va">judgment_mentions</span>,</span>
+<span>      instructions <span class="op">=</span> <span class="va">judgment_instructions</span>,</span>
+<span>      parser <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_bebel_tool_judgment_parser.html">ducksemantics_bebel_tool_judgment_parser</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>      record <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">stress_candidates</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"hpo_label"</span>, <span class="st">"start_offset"</span>, <span class="st">"end_offset"</span></span>
-<span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                candidate_span     hpo_id                   hpo_label</span></span>
-<span><span class="co">#&gt; 1  global developmental delay HP:0001263 Developmental delay, global</span></span>
-<span><span class="co">#&gt; 2    autism spectrum disorder HP:0000729    Autism spectrum disorder</span></span>
-<span><span class="co">#&gt; 3                      autism HP:0000717                      Autism</span></span>
-<span><span class="co">#&gt; 4     intellectual disability HP:0001249     Intellectual disability</span></span>
-<span><span class="co">#&gt; 5               brachydactyly HP:0001156               Brachydactyly</span></span>
-<span><span class="co">#&gt; 6        hypomelanotic macule HP:0009719       Hypomelanotic macules</span></span>
-<span><span class="co">#&gt; 7         café-au-lait macule HP:0000957        Cafe-au-lait macules</span></span>
-<span><span class="co">#&gt; 8              cardiomyopathy HP:0001638              Cardiomyopathy</span></span>
-<span><span class="co">#&gt; 9              cardiomyopathy HP:0001638              Cardiomyopathy</span></span>
-<span><span class="co">#&gt; 10      septal cardiac defect HP:0001671         Heart septal defect</span></span>
-<span><span class="co">#&gt; 11                   seizures HP:0001250                     Seizure</span></span>
-<span><span class="co">#&gt; 12                  hypotonia HP:0001252                   Hypotonia</span></span>
-<span><span class="co">#&gt; 13                     ataxia HP:0001251                      Ataxia</span></span>
-<span><span class="co">#&gt; 14               hearing loss HP:0000365                Hearing loss</span></span>
-<span><span class="co">#&gt; 15              short stature HP:0004322               Short stature</span></span>
-<span><span class="co">#&gt; 16               microcephaly HP:0000252                Microcephaly</span></span>
-<span><span class="co">#&gt; 17             thrombocytosis HP:0001894              Thrombocytosis</span></span>
-<span><span class="co">#&gt;    start_offset end_offset</span></span>
-<span><span class="co">#&gt; 1            73         99</span></span>
-<span><span class="co">#&gt; 2           101        125</span></span>
-<span><span class="co">#&gt; 3           492        498</span></span>
-<span><span class="co">#&gt; 4           127        150</span></span>
-<span><span class="co">#&gt; 5           152        165</span></span>
-<span><span class="co">#&gt; 6           171        191</span></span>
-<span><span class="co">#&gt; 7           214        233</span></span>
-<span><span class="co">#&gt; 8           269        283</span></span>
-<span><span class="co">#&gt; 9           524        538</span></span>
-<span><span class="co">#&gt; 10          290        311</span></span>
-<span><span class="co">#&gt; 11          324        332</span></span>
-<span><span class="co">#&gt; 12          337        346</span></span>
-<span><span class="co">#&gt; 13          351        357</span></span>
-<span><span class="co">#&gt; 14          366        378</span></span>
-<span><span class="co">#&gt; 15          392        405</span></span>
-<span><span class="co">#&gt; 16          413        425</span></span>
-<span><span class="co">#&gt; 17          473        487</span></span></code></pre></div>
-<p>The real HPO candidate layer deliberately captures both true proband findings and context traps: negated terms, family-history terms, and duplicate mentions. That is exactly why the model layer should produce explicit keep/drop decisions with an evidence quote.</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pi_runner</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">prompt</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">usage</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="va">reply</span> <span class="op">&lt;-</span> <span class="fu">piknit</span><span class="fu">::</span><span class="fu">pi_stream</span><span class="op">(</span></span>
-<span>    <span class="va">prompt</span>,</span>
-<span>    provider <span class="op">=</span> <span class="st">"openai-codex"</span>,</span>
-<span>    model <span class="op">=</span> <span class="st">"gpt-5.3-codex-spark"</span>,</span>
-<span>    timeout <span class="op">=</span> <span class="fl">300</span>,</span>
-<span>    on_delta <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>    on_event <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">event</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">event</span><span class="op">$</span><span class="va">type</span>, <span class="st">"turn_end"</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">event</span><span class="op">$</span><span class="va">message</span><span class="op">$</span><span class="va">usage</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>        <span class="va">usage</span> <span class="op">&lt;&lt;-</span> <span class="va">event</span><span class="op">$</span><span class="va">message</span><span class="op">$</span><span class="va">usage</span></span>
-<span>      <span class="op">}</span></span>
-<span>    <span class="op">}</span></span>
-<span>  <span class="op">)</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">reply</span>, <span class="st">"usage"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="va">usage</span></span>
-<span>  <span class="va">reply</span></span>
-<span><span class="op">}</span></span>
-<span></span>
-<span><span class="va">stress_run</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/hpo_adjudicate_candidates.html">hpo_adjudicate_candidates</a></span><span class="op">(</span></span>
-<span>  <span class="va">stress_note</span>,</span>
-<span>  <span class="va">stress_candidates</span>,</span>
-<span>  runner <span class="op">=</span> <span class="va">pi_runner</span>,</span>
-<span>  provider <span class="op">=</span> <span class="st">"openai-codex"</span>,</span>
-<span>  model <span class="op">=</span> <span class="st">"gpt-5.3-codex-spark"</span>,</span>
-<span>  run_id <span class="op">=</span> <span class="st">"hpo-stress-readme"</span></span>
+<span><span class="va">judgment</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"subject_id"</span>, <span class="st">"object_id"</span>, <span class="st">"decision"</span>, <span class="st">"confidence"</span>, <span class="st">"model"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;               subject_id  object_id decision confidence   model</span></span>
+<span><span class="co">#&gt; 1 readme-judgment:000001 HP:0004322     keep          1 Rbebelm</span></span></code></pre></div>
+<p>Benchmarks are ordinary R data flowing through pipes. The metrics below use gold HPO phenotypes and expose the current lexical baseline before model judgment removes negated or disease-level mentions.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">suite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_benchmark_cases.html">ducksemantics_benchmark_cases</a></span><span class="op">(</span></span>
+<span>  cases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
+<span>    text <span class="op">=</span> <span class="va">note</span>,</span>
+<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  gold <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
+<span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
+<span>    node_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0001263"</span>, <span class="st">"HP:0001250"</span>, <span class="st">"HP:0004322"</span>, <span class="st">"HP:0001638"</span><span class="op">)</span>,</span>
+<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  <span class="op">)</span>,</span>
+<span>  suite <span class="op">=</span> <span class="st">"readme-hpo-mondo"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">stress_run</span><span class="op">$</span><span class="va">adjudication</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"candidate_span"</span>, <span class="st">"hpo_id"</span>, <span class="st">"decision"</span>, <span class="st">"patient_context"</span>,</span>
-<span>  <span class="st">"evidence_span"</span>, <span class="st">"short_reason"</span></span>
-<span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                candidate_span     hpo_id decision patient_context</span></span>
-<span><span class="co">#&gt; 1  global developmental delay HP:0001263     keep         patient</span></span>
-<span><span class="co">#&gt; 2    autism spectrum disorder HP:0000729     keep         patient</span></span>
-<span><span class="co">#&gt; 3                      autism HP:0000717     drop  family_history</span></span>
-<span><span class="co">#&gt; 4     intellectual disability HP:0001249     keep         patient</span></span>
-<span><span class="co">#&gt; 5               brachydactyly HP:0001156     keep         patient</span></span>
-<span><span class="co">#&gt; 6        hypomelanotic macule HP:0009719     keep         patient</span></span>
-<span><span class="co">#&gt; 7         café-au-lait macule HP:0000957     keep         patient</span></span>
-<span><span class="co">#&gt; 8              cardiomyopathy HP:0001638     keep         patient</span></span>
-<span><span class="co">#&gt; 9              cardiomyopathy HP:0001638     drop  family_history</span></span>
-<span><span class="co">#&gt; 10      septal cardiac defect HP:0001671     keep         patient</span></span>
-<span><span class="co">#&gt; 11                   seizures HP:0001250     drop         negated</span></span>
-<span><span class="co">#&gt; 12                  hypotonia HP:0001252     drop         negated</span></span>
-<span><span class="co">#&gt; 13                     ataxia HP:0001251     drop         negated</span></span>
-<span><span class="co">#&gt; 14               hearing loss HP:0000365     drop         negated</span></span>
-<span><span class="co">#&gt; 15              short stature HP:0004322     drop         negated</span></span>
-<span><span class="co">#&gt; 16               microcephaly HP:0000252     drop         negated</span></span>
-<span><span class="co">#&gt; 17             thrombocytosis HP:0001894     drop  family_history</span></span>
-<span><span class="co">#&gt;                             evidence_span</span></span>
-<span><span class="co">#&gt; 1              global developmental delay</span></span>
-<span><span class="co">#&gt; 2                autism spectrum disorder</span></span>
-<span><span class="co">#&gt; 3  brother with thrombocytosis and autism</span></span>
-<span><span class="co">#&gt; 4                 intellectual disability</span></span>
-<span><span class="co">#&gt; 5                           brachydactyly</span></span>
-<span><span class="co">#&gt; 6   one hypomelanotic macule on the trunk</span></span>
-<span><span class="co">#&gt; 7     one café-au-lait macule on the neck</span></span>
-<span><span class="co">#&gt; 8                          cardiomyopathy</span></span>
-<span><span class="co">#&gt; 9     a maternal aunt with cardiomyopathy</span></span>
-<span><span class="co">#&gt; 10                a septal cardiac defect</span></span>
-<span><span class="co">#&gt; 11                            no seizures</span></span>
-<span><span class="co">#&gt; 12                           no hypotonia</span></span>
-<span><span class="co">#&gt; 13                              no ataxia</span></span>
-<span><span class="co">#&gt; 14                        no hearing loss</span></span>
-<span><span class="co">#&gt; 15                       no short stature</span></span>
-<span><span class="co">#&gt; 16                        no microcephaly</span></span>
-<span><span class="co">#&gt; 17          a brother with thrombocytosis</span></span>
-<span><span class="co">#&gt;                                                                                                 short_reason</span></span>
-<span><span class="co">#&gt; 1                                  The patient is explicitly described as having global developmental delay.</span></span>
-<span><span class="co">#&gt; 2                                     The note directly lists autism spectrum disorder as a patient finding.</span></span>
-<span><span class="co">#&gt; 3  Autism is only mentioned in the family-history sentence for the brother, not as a finding in the proband.</span></span>
-<span><span class="co">#&gt; 4                                          The patient is explicitly stated to have intellectual disability.</span></span>
-<span><span class="co">#&gt; 5                                          Brachydactyly is explicitly documented in the patient's findings.</span></span>
-<span><span class="co">#&gt; 6                                         The note explicitly states the patient has a hypomelanotic macule.</span></span>
-<span><span class="co">#&gt; 7                                          The patient is explicitly reported to have a café-au-lait macule.</span></span>
-<span><span class="co">#&gt; 8                                   Echocardiogram findings directly document cardiomyopathy in the patient.</span></span>
-<span><span class="co">#&gt; 9               This cardiomyopathy mention refers to the maternal aunt and is not a finding in the proband.</span></span>
-<span><span class="co">#&gt; 10                                       The note explicitly states the patient has a septal cardiac defect.</span></span>
-<span><span class="co">#&gt; 11                                       The clinician explicitly negates seizures in the review of systems.</span></span>
-<span><span class="co">#&gt; 12                                           The note explicitly states the patient does not have hypotonia.</span></span>
-<span><span class="co">#&gt; 13                                                              Ataxia is explicitly denied for the patient.</span></span>
-<span><span class="co">#&gt; 14                                                              Hearing loss is explicitly listed as absent.</span></span>
-<span><span class="co">#&gt; 15                                                                The note states there is no short stature.</span></span>
-<span><span class="co">#&gt; 16                                               Microcephaly is explicitly denied in the physical findings.</span></span>
-<span><span class="co">#&gt; 17                                       Thrombocytosis is reported only in the brother, not in the proband.</span></span>
+<span><span class="va">run</span> <span class="op">&lt;-</span> <span class="va">suite</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/ducksemantics_benchmark.html">ducksemantics_benchmark</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">stress_run</span><span class="op">$</span><span class="va">run_log</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"provider"</span>, <span class="st">"model"</span>, <span class="st">"input_tokens"</span>, <span class="st">"output_tokens"</span>, <span class="st">"total_tokens"</span>,</span>
-<span>  <span class="st">"reasoning_tokens"</span>, <span class="st">"estimated_cost_usd"</span>, <span class="st">"latency_seconds"</span>, <span class="st">"parse_success"</span></span>
-<span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;       provider               model input_tokens output_tokens total_tokens</span></span>
-<span><span class="co">#&gt; 1 openai-codex gpt-5.3-codex-spark         2896          5330        12322</span></span>
-<span><span class="co">#&gt;   reasoning_tokens estimated_cost_usd latency_seconds parse_success</span></span>
-<span><span class="co">#&gt; 1             3227          0.0804048        16.32628          TRUE</span></span></code></pre></div>
-<p>The real-HPO test also shows the boundary between the deterministic candidate layer and the model-expansion arms: phrases such as “floppy in infancy”, “not talking yet”, “learns slowly”, and “staring spells” may require <code>model_only</code> or <code>model_candidates_tools_model</code> runs if we want inferred or paraphrased phenotype recovery.</p>
-</div>
-<div class="section level2">
-<h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
-</h2>
-<p>This package follows the same lightweight R package workflow as the surrounding packages in this workspace:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">make</span> rd             <span class="co"># roxygen2 docs + NAMESPACE</span></span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="fu">make</span> test           <span class="co"># tinytest</span></span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="fu">make</span> index-real-hpo <span class="co"># download/build a cached full HPO index</span></span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="fu">make</span> rdm            <span class="co"># render README.md with the full real-HPO + Pi stress test</span></span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="fu">make</span> rdm-real-hpo   <span class="co"># alias for make rdm</span></span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a><span class="fu">make</span> site           <span class="co"># pkgdown site</span></span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="fu">make</span> check          <span class="co"># R CMD check --as-cran --no-manual</span></span></code></pre></div>
-</div>
+<span><span class="va">run</span><span class="op">$</span><span class="va">metrics</span></span>
+<span><span class="co">#&gt;     by tp fp fn precision recall        f1</span></span>
+<span><span class="co">#&gt; 1 node  4  3  0 0.5714286      1 0.7272727</span></span>
+<span><span class="va">run</span><span class="op">$</span><span class="va">timings</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"seconds"</span>, <span class="st">"token_count"</span>, <span class="st">"prediction_count"</span>, <span class="st">"prediction_bytes"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;           case_id seconds token_count prediction_count prediction_bytes</span></span>
+<span><span class="co">#&gt; 1 readme-case-001   0.086          15               13             6152</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">conn</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
-<li><a href="https://github.com/sounkou-bioinfo/RfastHPOCR/" class="external-link">Browse source code</a></li>
-<li><a href="https://github.com/sounkou-bioinfo/RfastHPOCR/issues" class="external-link">Report a bug</a></li>
+<li><a href="https://github.com/sounkou-bioinfo/ducksemantics/" class="external-link">Browse source code</a></li>
+<li><a href="https://github.com/sounkou-bioinfo/ducksemantics/issues" class="external-link">Report a bug</a></li>
 </ul>
 </div>
 
@@ -508,7 +259,7 @@
 <div class="citation">
 <h2 data-toc-skip>Citation</h2>
 <ul class="list-unstyled">
-<li><a href="authors.html#citation">Citing RfastHPOCR</a></li>
+<li><a href="authors.html#citation">Citing ducksemantics</a></li>
 </ul>
 </div>
 
@@ -516,16 +267,10 @@
 <h2 data-toc-skip>Developers</h2>
 <ul class="list-unstyled">
 <li>Sounkou Mahamane Toure <br><small class="roles"> Author, maintainer </small>   </li>
-<li><a href="authors.html">More about authors...</a></li>
 </ul>
 </div>
 
-<div class="dev-status">
-<h2 data-toc-skip>Dev status</h2>
-<ul class="list-unstyled">
-<li><a href="https://github.com/sounkou-bioinfo/RfastHPOCR/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/sounkou-bioinfo/RfastHPOCR/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
-</ul>
-</div>
+
 
   </aside>
 </div>
