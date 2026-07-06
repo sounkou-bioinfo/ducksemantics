@@ -1,3 +1,3 @@
 if (requireNamespace("tinytest", quietly = TRUE)) {
-  tinytest::test_package("RfastHPOCR")
+  tinytest::test_package("ducksemantics")
 }

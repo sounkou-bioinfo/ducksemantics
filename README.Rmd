@@ -2,383 +2,203 @@
 output: github_document
 ---
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
 ```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
-)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+options(width = 96)
 ```
 
-# RfastHPOCR
+# ducksemantics
 
-<!-- badges: start -->
-[![R-CMD-check](https://github.com/sounkou-bioinfo/RfastHPOCR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RfastHPOCR/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
+`ducksemantics` is a DuckDB-native semantic graph and grounding package for R.
+The package owns the graph schema, OBO import, alias indexing, mention
+grounding, provider interfaces, model judgment, and benchmark measurement.
 
-`RfastHPOCR` is a reticulate-backed R binding to Tudor Groza's
-[`FastHPOCR`](https://github.com/tudorgroza/fast_hpo_cr) Python package for
-fast concept recognition over Human Phenotype Ontology terms in free text.
+HPO and MONDO are first-class graph sources here, but they are not the whole
+abstraction. The same tables can hold ORPHANET, study notes, pi-bio-agent memory
+edges, run ledgers, and local concept maps. BebeLM/Rbebelm is the bundled
+on-device provider for CPU embedding and judgment; other providers implement
+the same S7 generics.
 
-The package keeps the upstream Python implementation as the execution engine and
-adds R-oriented helpers for:
+```{r}
+library(ducksemantics)
+library(Rbebelm)
 
-- declaring and installing the Python dependency set (`FastHPOCR`, `pronto`, and
-  `tqdm`),
-- downloading ontology source files,
-- building HPO, MONDO, ORPHANET, and SNOMED indexes,
-- loading a FastHPOCR annotator from an index file, and
-- converting annotation objects to R data frames with explicit offset columns.
+cache_dir <- tools::R_user_dir("ducksemantics", "cache")
 
-## Installation
-
-Install from GitHub with `remotes::install_github("sounkou-bioinfo/RfastHPOCR")`.
-
-For ordinary use, `RfastHPOCR` follows current reticulate package practice:
-`library(RfastHPOCR)` declares the Python requirements with
-`reticulate::py_require()`, and reticulate can resolve them in an ephemeral
-virtual environment when Python is first initialized.
-
-```{r python-requirements}
-library(RfastHPOCR)
-fast_hpo_cr_python_packages()
-fast_hpo_cr_available()
-```
-
-`FastHPOCR` 0.1.4 on PyPI does not currently declare all runtime dependencies,
-so `RfastHPOCR` requests `pronto` and `tqdm` explicitly.
-
-If you prefer a persistent named environment, create it and select it before
-Python is initialized:
-
-For a persistent environment, run `fast_hpo_cr_install(envname = "r-fast-hpo-cr", method = "virtualenv")`, restart R, and then call `fast_hpo_cr_use_env("r-fast-hpo-cr", method = "virtualenv")` before the first Python import.
-
-To install from the upstream GitHub repository instead of PyPI:
-
-To install the Python dependency from the upstream GitHub repository instead of PyPI, use `fast_hpo_cr_install(source = "github", ref = "main")`.
-
-If Python was already initialized before selecting or installing an environment,
-restart R so reticulate can bind to the intended environment.
-
-## Ontology downloads
-
-HPO is the primary target. HPO release assets are published at
-<https://github.com/obophenotype/human-phenotype-ontology/releases>. The
-`hp.obo` helper uses the stable OBO PURL and is the source file used by
-FastHPOCR's HPO indexer. Additional HPO JSON, OWL, HPOA, and gene/phenotype
-tables are exposed for validation and audit workflows.
-
-```{r ontology-urls}
-fast_hpo_cr_ontology_urls()[grep("^hpo_", names(fast_hpo_cr_ontology_urls()))]
-```
-
-For a real HPO analysis, use `download_hpo_obo("ontologies")` to fetch the
-indexing source, plus optional audit resources such as `download_hpo_json()`,
-`download_hpo_phenotype_hpoa()`, and `download_hpo_genes_to_phenotype()`.
-
-MONDO and Orphanet download helpers are present for the other upstream
-FastHPOCR indexers, but they are not the focus of this package. MONDO release
-assets are published at <https://github.com/monarch-initiative/mondo/releases>.
-
-The rest of this README is not a pseudo API sketch: it creates a tiny HPO-style
-OBO file, runs the same HPO download helper through a local file source, indexes
-it multiple ways with the Python FastHPOCR engine, annotates text, and writes
-the annotation table. The local file source keeps README rendering fast and
-network-independent while still exercising the real download, indexing,
-re-indexing, annotation, and serialization code paths.
-
-## End-to-end HPO indexing and annotation
-
-Create a tiny HPO-like ontology fixture. It contains the HPO root needed by
-FastHPOCR (`HP:0000118`), two top-level abnormality categories, and two concrete
-phenotype terms.
-
-```{r tiny-ontology}
-work_dir <- file.path(tempdir(), "RfastHPOCR-readme")
-unlink(work_dir, recursive = TRUE)
-dir.create(work_dir, recursive = TRUE)
-
-source_obo <- file.path(work_dir, "source-hp.obo")
-writeLines(c(
-  "format-version: 1.2",
-  "ontology: hp",
-  "",
-  "[Term]",
-  "id: HP:0000001",
-  "name: All",
-  "",
-  "[Term]",
-  "id: HP:0000118",
-  "name: Phenotypic abnormality",
-  "is_a: HP:0000001 ! All",
-  "",
-  "[Term]",
-  "id: HP:0000119",
-  "name: Abnormality of the genitourinary system",
-  "is_a: HP:0000118 ! Phenotypic abnormality",
-  "",
-  "[Term]",
-  "id: HP:0000707",
-  "name: Abnormality of the nervous system",
-  "is_a: HP:0000118 ! Phenotypic abnormality",
-  "",
-  "[Term]",
-  "id: HP:0004322",
-  "name: Short stature",
-  "synonym: \"short height\" EXACT []",
-  "is_a: HP:0000119 ! Abnormality of the genitourinary system",
-  "",
-  "[Term]",
-  "id: HP:0001250",
-  "name: Seizure",
-  "synonym: \"seizures\" EXACT []",
-  "is_a: HP:0000707 ! Abnormality of the nervous system"
-), source_obo)
-
-hp_obo <- download_hpo_obo(
-  dest_dir = file.path(work_dir, "downloads"),
-  url = source_obo,
-  quiet = TRUE
-)
-basename(hp_obo)
-```
-
-Index both concrete phenotype branches and annotate a sentence.
-
-```{r index-all}
-index_all_log <- capture.output({
-  index_all <- index_hpo(
-    hpo_file = hp_obo,
-    output_dir = file.path(work_dir, "index-all"),
-    root_concepts = c("HP:0000119", "HP:0000707"),
-    include_top_level_category = TRUE,
-    compress_index = FALSE
+ontology_files <- c(
+  HPO = ducksemantics_cache_file(
+    "https://purl.obolibrary.org/obo/hp.obo",
+    "hp.obo",
+    cache_dir = cache_dir
+  ),
+  MONDO = ducksemantics_cache_file(
+    "https://purl.obolibrary.org/obo/mondo.obo",
+    "mondo.obo",
+    cache_dir = cache_dir
   )
-})
-grep("Collected|Indexing HPO terms|Serializing index", index_all_log, value = TRUE)
-file.exists(index_all)
-
-ann_all <- hpo_annotator(index_all)
-hits_all <- hpo_annotate(
-  ann_all,
-  "The patient has short stature and seizures.",
-  longest_match = TRUE
 )
-hits_all[, c("span", "id", "label", "start", "end", "start_offset", "end_offset")]
+
+weights_file <- Sys.getenv(
+  "BEBELM_WEIGHTS_FILE",
+  "/root/bebelm/LFM2.5-8B-A1B-Q4_K_M.gguf"
+)
+stopifnot(file.exists(weights_file))
 ```
 
-Re-index the same ontology restricted to the nervous-system branch. This is a
-real second FastHPOCR indexing pass; the genitourinary `Short stature` term is
-not present in this restricted index.
+The OBO parser produces the graph rows that DuckDB stores and indexes.
 
-```{r reindex-restricted}
-index_neuro_log <- capture.output({
-  index_neuro <- index_hpo(
-    hpo_file = hp_obo,
-    output_dir = file.path(work_dir, "index-neuro"),
-    root_concepts = "HP:0000707",
-    include_top_level_category = TRUE,
-    compress_index = FALSE
-  )
-})
-grep("Collected|Indexing HPO terms|Serializing index", index_neuro_log, value = TRUE)
-
-ann_neuro <- hpo_annotator(index_neuro)
-hpo_annotate(
-  ann_neuro,
-  "The patient has short stature and seizures.",
-  longest_match = TRUE
-)[, c("span", "id", "label")]
-```
-
-Re-index again with an external synonym file. The phrase `small stature` is not
-in the tiny OBO file; it comes from the external synonym file passed through to
-FastHPOCR.
-
-```{r reindex-external-synonym}
-syn_file <- file.path(work_dir, "external-synonyms.txt")
-writeLines("HP:0004322=small stature", syn_file)
-
-index_external_log <- capture.output({
-  index_external <- index_hpo(
-    hpo_file = hp_obo,
-    output_dir = file.path(work_dir, "index-external"),
-    root_concepts = c("HP:0000119", "HP:0000707"),
-    external_syn_file = syn_file,
-    include_top_level_category = TRUE,
-    compress_index = FALSE
-  )
-})
-grep("Collected|Indexing HPO terms|Serializing index", index_external_log, value = TRUE)
-
-ann_external <- hpo_annotator(index_external)
-hpo_annotate(ann_external, "Small stature was noted.")[, c("span", "id", "label")]
-```
-
-Serialize the R annotation table with the same tab-separated shape used by the
-upstream Python package.
-
-```{r write-annotations}
-out_tsv <- file.path(work_dir, "annotations.tsv")
-hpo_write_annotations(hits_all, out_tsv, include_categories = TRUE)
-readLines(out_tsv)
-```
-
-## Role in the hybrid HPO extraction pipeline
-
-The intended split is:
-
-- **FastHPOCR**: deterministic extractor/linker baseline for explicit phenotype mentions.
-- **Small local model**: phrase cleanup, paraphrase normalization, and candidate phenotype suggestions.
-- **piknit / Pi**: auditable orchestration in R Markdown or Quarto, including local tool calls, model calls, and report generation. See <https://github.com/sounkou-bioinfo/piknit>.
-
-In that design this package owns the deterministic FastHPOCR lane: text in,
-candidate HPO rows out, with provenance and offsets preserved.
-
-## Hybrid adjudication harness primitives
-
-The package now also provides the small, model-agnostic pieces needed to compare
-hybrid configurations without making `RfastHPOCR` depend on any one LLM provider.
-The main practical arm is:
-
-```text
-note + FastHPOCR candidates -> model keep/drop adjudication
-```
-
-FastHPOCR still generates deterministic candidates. The model is asked only for
-short auditable fields: `decision`, `evidence_span`, and `short_reason`.
-Reasoning-token counts, when a provider exposes them, are stored only as run
-metadata.
-
-```{r harness-candidates}
-review_text <- "Short stature was noted. No seizures were reported."
-review_hits <- hpo_annotate(ann_all, review_text, longest_match = TRUE)
-review_candidates <- hpo_candidate_table(review_hits, case_id = "readme-case-001")
-review_candidates[, c("case_id", "candidate_id", "candidate_span", "hpo_id", "hpo_label")]
-```
-
-The harness modes are explicit so that `tool_only`, `model_only`, and hybrid
-arms can be compared with the same term-level schema.
-
-```{r harness-modes}
-hpo_harness_modes()[, c("mode", "question")]
-```
-
-The prompt embeds the candidate rows and a strict JSON schema. The README prints
-only the beginning of the prompt to keep the rendered document short.
-
-```{r harness-prompt}
-prompt <- hpo_adjudication_prompt(review_text, review_candidates)
-cat(paste(head(strsplit(prompt, "\n", fixed = TRUE)[[1]], 16), collapse = "\n"))
-```
-
-A live model response is expected to be JSON. The real `piknit` / Pi call is
-shown in the full-HPO stress test below; no hand-written adjudication response
-is used in this README.
-
-## Real-HPO clinical stress test
-
-The tiny ontology above keeps the basic FastHPOCR example fast, but the real
-harness should also be exercised against the current full HPO. The helper below
-downloads `hp.obo` and builds a cached FastHPOCR index under
-`RFASTHPOCR_REAL_HPO_DIR` or the R user cache directory. A fresh full-HPO build
-can take several minutes; subsequent renders reuse the index.
-
-```{r real-hpo-index}
-real_index <- hpo_real_index()
+```{r}
+graphs <- list(
+  HPO = ducksemantics_read_obo(ontology_files[["HPO"]], family = "HPO", source = "hp.obo"),
+  MONDO = ducksemantics_read_obo(ontology_files[["MONDO"]], family = "MONDO", source = "mondo.obo")
+)
 
 data.frame(
-  hp_obo = basename(attr(real_index, "hpo_file")),
-  hpo_index = basename(real_index),
-  index_size_mb = round(file.info(real_index)$size / 1024^2, 1),
+  source = names(graphs),
+  nodes = vapply(graphs, function(x) nrow(x$nodes), integer(1)),
+  aliases = vapply(graphs, function(x) nrow(x$aliases), integer(1)),
+  edges = vapply(graphs, function(x) nrow(x$edges), integer(1)),
+  row.names = NULL
+)
+```
+
+The database below is rebuilt from those full ontologies, then indexed once for
+lexical grounding.
+
+```{r}
+db_path <- file.path(cache_dir, "readme.duckdb")
+unlink(db_path)
+
+conn <- ducksemantics_connect(db_path)
+ducksemantics_write_graph(
+  conn,
+  nodes = graphs$HPO$nodes,
+  aliases = graphs$HPO$aliases,
+  edges = graphs$HPO$edges,
+  replace = TRUE,
+  index = FALSE
+)
+ducksemantics_write_graph(
+  conn,
+  nodes = graphs$MONDO$nodes,
+  aliases = graphs$MONDO$aliases,
+  edges = graphs$MONDO$edges,
+  index = TRUE
+)
+
+ducksemantics_index_stats(conn)$tables
+```
+
+Grounding returns deterministic candidates with source provenance. The diabetes
+mention is deliberately negated; the lexical layer should surface it, and the
+judgment layer should decide whether it belongs in the patient phenotype.
+
+```{r}
+note <- paste(
+  "The proband presents with global developmental delay, seizures,",
+  "short stature, cardiomyopathy, and no diabetes mellitus."
+)
+
+mentions <- ducksemantics_annotate(conn, note, document_id = "readme-case-001")
+unique(mentions[, c("span", "node_id", "alias_kind", "source")])
+```
+
+The BebeLM bridge is typed as an embedding provider. The vectors below come from
+the local GGUF model and are cached as RDS because they are deterministic for the
+same model and pooling configuration.
+
+```{r}
+model <- bebel_model_load(weights_file, num_threads = 2)
+embedding_provider <- ducksemantics_bebel_embedding_provider(model, pooling = "mean")
+
+embedding_terms <- c(
+  "global developmental delay",
+  "seizures",
+  "short stature",
+  "cardiomyopathy",
+  "diabetes mellitus"
+)
+
+embeddings <- ducksemantics_cache_rds(
+  file.path(cache_dir, "readme-bebel-embeddings.rds"),
+  function() ducksemantics_embed(embedding_provider, embedding_terms)
+)
+
+data.frame(
+  terms = nrow(embeddings),
+  dimensions = ncol(embeddings),
+  first_row_l2 = round(sqrt(sum(embeddings[1, ] ^ 2)), 4)
+)
+```
+
+BebeLM judgment uses the same provider interface. The parser here accepts
+BebeLM tool calls and JSON judgment payloads, then returns the rows expected by
+the semantic store.
+
+```{r}
+judgment_mentions <- data.frame(
+  mention_id = "readme-judgment:000001",
+  node_id = "HP:0004322",
+  span = "short stature",
+  start_offset = 26L,
+  end_offset = 39L,
+  score = 1,
+  alias = "short stature",
+  alias_kind = "label",
+  source = "hp.obo",
   stringsAsFactors = FALSE
 )
-```
 
-```{r real-hpo-stress-candidates}
-stress_note <- paste(
-  "The patient is a 6-year-old boy referred for genetics evaluation. He has global developmental delay, autism spectrum disorder, intellectual disability, brachydactyly, one hypomelanotic macule on the trunk, and one café-au-lait macule on the neck. Echocardiogram showed cardiomyopathy and a septal cardiac defect.",
-  "He has no seizures, no hypotonia, no ataxia, and no hearing loss. There is no short stature and no microcephaly.",
-  "Family history is notable for a brother with thrombocytosis and autism and a maternal aunt with cardiomyopathy. These findings are not present in the proband.",
-  "Earlier notes described the child as floppy in infancy and not talking yet at 3 years of age. Teachers report that he learns slowly. Parents also describe occasional staring spells.",
-  sep = "\n\n"
+judgment_instructions <- c(
+  "You adjudicate deterministic semantic grounding candidates.",
+  "Return only JSON: an array of objects with mention_id, decision, confidence, evidence_span, short_reason.",
+  "Use keep for a supported patient finding. Never invent identifiers."
 )
 
-real_ann <- hpo_annotator(real_index)
-stress_hits <- hpo_annotate(real_ann, stress_note, longest_match = TRUE)
-stress_candidates <- hpo_candidate_table(
-  stress_hits,
-  case_id = "hpo-stress-001",
-  source = "FastHPOCR-real-HPO"
+judgment <- ducksemantics_cache_rds(
+  file.path(cache_dir, "readme-bebel-judgment.rds"),
+  function() {
+    agent <- bebel_agent(model, greedy = TRUE, max_gen = 96, max_think = 0)
+    ducksemantics_bebel_judge(
+      agent,
+      "The proband presents with short stature.",
+      judgment_mentions,
+      instructions = judgment_instructions,
+      parser = ducksemantics_bebel_tool_judgment_parser(),
+      record = FALSE
+    )
+  }
 )
 
-stress_candidates[, c(
-  "candidate_span", "hpo_id", "hpo_label", "start_offset", "end_offset"
-)]
+judgment[, c("subject_id", "object_id", "decision", "confidence", "model")]
 ```
 
-The real HPO candidate layer deliberately captures both true proband findings
-and context traps: negated terms, family-history terms, and duplicate mentions.
-That is exactly why the model layer should produce explicit keep/drop decisions
-with an evidence quote.
+Benchmarks are ordinary R data flowing through pipes. The metrics below use
+gold HPO phenotypes and expose the current lexical baseline before model
+judgment removes negated or disease-level mentions.
 
-```{r real-hpo-stress-adjudication}
-pi_runner <- function(prompt) {
-  usage <- list()
-  reply <- piknit::pi_stream(
-    prompt,
-    provider = "openai-codex",
-    model = "gpt-5.3-codex-spark",
-    timeout = 300,
-    on_delta = NULL,
-    on_event = function(event) {
-      if (identical(event$type, "turn_end") && !is.null(event$message$usage)) {
-        usage <<- event$message$usage
-      }
-    }
-  )
-  attr(reply, "usage") <- usage
-  reply
-}
-
-stress_run <- hpo_adjudicate_candidates(
-  stress_note,
-  stress_candidates,
-  runner = pi_runner,
-  provider = "openai-codex",
-  model = "gpt-5.3-codex-spark",
-  run_id = "hpo-stress-readme"
+```{r}
+suite <- ducksemantics_benchmark_cases(
+  cases = data.frame(
+    case_id = "readme-case-001",
+    text = note,
+    stringsAsFactors = FALSE
+  ),
+  gold = data.frame(
+    case_id = "readme-case-001",
+    node_id = c("HP:0001263", "HP:0001250", "HP:0004322", "HP:0001638"),
+    stringsAsFactors = FALSE
+  ),
+  suite = "readme-hpo-mondo"
 )
 
-stress_run$adjudication[, c(
-  "candidate_span", "hpo_id", "decision", "patient_context",
-  "evidence_span", "short_reason"
-)]
+run <- suite |>
+  ducksemantics_benchmark(conn)
 
-stress_run$run_log[, c(
-  "provider", "model", "input_tokens", "output_tokens", "total_tokens",
-  "reasoning_tokens", "estimated_cost_usd", "latency_seconds", "parse_success"
-)]
+run$metrics
+run$timings[, c("case_id", "seconds", "token_count", "prediction_count", "prediction_bytes")]
 ```
 
-The real-HPO test also shows the boundary between the deterministic
-candidate layer and the model-expansion arms: phrases such as "floppy in
-infancy", "not talking yet", "learns slowly", and "staring spells" may require
-`model_only` or `model_candidates_tools_model` runs if we want inferred or
-paraphrased phenotype recovery.
-
-## Development
-
-This package follows the same lightweight R package workflow as the surrounding
-packages in this workspace:
-
-```sh
-make rd             # roxygen2 docs + NAMESPACE
-make test           # tinytest
-make index-real-hpo # download/build a cached full HPO index
-make rdm            # render README.md with the full real-HPO + Pi stress test
-make rdm-real-hpo   # alias for make rdm
-make site           # pkgdown site
-make check          # R CMD check --as-cran --no-manual
+```{r}
+DBI::dbDisconnect(conn, shutdown = TRUE)
 ```

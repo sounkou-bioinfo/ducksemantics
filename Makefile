@@ -50,15 +50,8 @@ test: install
 rdm: install
 	R -e "rmarkdown::render('README.Rmd')" && rm -f README.html
 
-# backward-compatible alias; README rendering now runs the real-HPO stress test
-rdm-real-hpo: rdm
-
-# build or reuse a cached full real-HPO index
-index-real-hpo: install
-	R -e 'library(RfastHPOCR); idx <- hpo_real_index(); print(idx); print(file.info(idx)[, c("size", "mtime")])'
-
 # build the pkgdown site into docs/
 site: install
 	R -e "pkgdown::build_site()"
 
-.PHONY: all rd build check install_deps install install2 install3 clean dev-install test1 test2 test0 test rdm rdm-real-hpo index-real-hpo site
+.PHONY: all rd build check install_deps install install2 install3 clean dev-install test1 test2 test0 test rdm site
