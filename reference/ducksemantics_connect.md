@@ -5,7 +5,7 @@ Connect to a DuckDB semantic store
 ## Usage
 
 ``` r
-ducksemantics_connect(dbdir = ":memory:", read_only = FALSE)
+ducksemantics_connect(dbdir = ":memory:", read_only = FALSE, array = "matrix")
 ```
 
 ## Arguments
@@ -17,6 +17,11 @@ ducksemantics_connect(dbdir = ":memory:", read_only = FALSE)
 - read_only:
 
   Open read-only?
+
+- array:
+
+  DuckDB array conversion mode. The default enables native vector
+  columns to round-trip through R matrices.
 
 ## Value
 

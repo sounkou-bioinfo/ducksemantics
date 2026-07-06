@@ -16,7 +16,7 @@ ducksemantics_bebel_runner(agent, on_event = NULL)
 
 - on_event:
 
-  Optional Rbebelm event callback.
+  Optional Rbebelm event handler.
 
 ## Value
 

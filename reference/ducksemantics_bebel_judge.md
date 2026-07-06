@@ -59,7 +59,7 @@ ducksemantics_bebel_judge(
 
 - on_event:
 
-  Optional Rbebelm event callback.
+  Optional Rbebelm event handler.
 
 - record:
 

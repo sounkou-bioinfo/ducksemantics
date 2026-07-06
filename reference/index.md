@@ -12,12 +12,59 @@
   : Semantic graph table names
 - [`ducksemantics_write_graph()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_graph.md)
   : Write graph rows into the semantic store
+- [`ducksemantics_embedding_batch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_batch.md)
+  : Construct an embedding batch
+- [`ducksemantics_write_embeddings()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_embeddings.md)
+  : Store an embedding batch in DuckDB
+- [`ducksemantics_token_embedding_batch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_token_embedding_batch.md)
+  : Construct a token embedding batch
+- [`ducksemantics_write_token_embeddings()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_token_embeddings.md)
+  : Store token embeddings for late-interaction scoring
+- [`ducksemantics_embedding_query()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_query.md)
+  : Construct an embedding search query
+- [`ducksemantics_embedding_search()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_search.md)
+  : Search embeddings with DuckDB vector functions
+- [`ducksemantics_embedding_index_spec()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_index_spec.md)
+  : Construct an embedding index specification
+- [`ducksemantics_materialize_embedding_index()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_materialize_embedding_index.md)
+  : Materialize a fixed-dimension embedding table
+- [`ducksemantics_embedding_cluster_spec()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_cluster_spec.md)
+  : Construct an embedding clustering specification
+- [`ducksemantics_cluster_embeddings()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_cluster_embeddings.md)
+  : Cluster embedding rows
+- [`ducksemantics_embedding_cluster_summary()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_cluster_summary.md)
+  : Summarize stored embedding clusters
+- [`ducksemantics_embedding_cluster_graph_agreement()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_cluster_graph_agreement.md)
+  : Compare embedding clusters with graph edges
 - [`ducksemantics_projection_sql()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_projection_sql.md)
   : Project any edge-shaped source relation into graph shape
 - [`ducksemantics_closure_sql()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_closure_sql.md)
   : Materialize transitive edge closure
 - [`ducksemantics_index_stats()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_index_stats.md)
   : Summarize semantic index size
+- [`DucksemanticsEmbeddingBatch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingBatch.md)
+  : Embedding batch for the semantic store
+- [`DucksemanticsTokenEmbeddingBatch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTokenEmbeddingBatch.md)
+  : Token embedding batch for late-interaction storage
+- [`DucksemanticsEmbeddingQuery()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingQuery.md)
+  : Embedding search query
+- [`DucksemanticsEmbeddingIndexSpec()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingIndexSpec.md)
+  : Embedding index specification
+- [`DucksemanticsEmbeddingClusterSpec()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingClusterSpec.md)
+  : Embedding clustering specification
+
+## Value Types
+
+- [`DucksemanticsScalarText()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsScalarText.md)
+  : Non-empty scalar text
+- [`DucksemanticsSqlIdentifier()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsSqlIdentifier.md)
+  : SQL identifier
+- [`DucksemanticsDbConnection()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsDbConnection.md)
+  : DBI connection reference
+- [`DucksemanticsTable`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTable.md)
+  : Data frame contract
+- [`DucksemanticsEmbeddingMatrix()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingMatrix.md)
+  : Embedding matrix contract
 
 ## Grounding
 
