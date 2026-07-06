@@ -9,7 +9,7 @@ ducksemantics_bebel_runner(agent, on_event = NULL)
 \arguments{
 \item{agent}{A \code{Rbebelm} agent object.}
 
-\item{on_event}{Optional Rbebelm event callback.}
+\item{on_event}{Optional Rbebelm event handler.}
 }
 \value{
 An object implementing \link{DucksemanticsPromptRunner}.

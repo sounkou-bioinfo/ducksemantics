@@ -4,12 +4,15 @@
 \alias{ducksemantics_connect}
 \title{Connect to a DuckDB semantic store}
 \usage{
-ducksemantics_connect(dbdir = ":memory:", read_only = FALSE)
+ducksemantics_connect(dbdir = ":memory:", read_only = FALSE, array = "matrix")
 }
 \arguments{
 \item{dbdir}{DuckDB database path, or \code{":memory:"}.}
 
 \item{read_only}{Open read-only?}
+
+\item{array}{DuckDB array conversion mode. The default enables native vector
+columns to round-trip through R matrices.}
 }
 \value{
 A DBI connection.

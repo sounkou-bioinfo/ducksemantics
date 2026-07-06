@@ -22,6 +22,7 @@ the same S7 generics.
 ```{r}
 library(ducksemantics)
 library(Rbebelm)
+library(Rfmalloc)
 
 cache_dir <- tools::R_user_dir("ducksemantics", "cache")
 
@@ -128,6 +129,107 @@ data.frame(
   terms = nrow(embeddings),
   dimensions = ncol(embeddings),
   first_row_l2 = round(sqrt(sum(embeddings[1, ] ^ 2)), 4)
+)
+```
+
+BebeLM embeddings are written back to DuckDB, then searched with DuckDB vector
+functions. HNSW can be added by the same index spec; the README materializes the
+fixed-dimension table without building the extension-backed index so the example
+stays focused on the package API.
+
+```{r}
+embedding_label <- "Rbebelm mean"
+
+ducksemantics_embedding_batch(
+  embeddings = embeddings,
+  subject_id = embedding_terms,
+  subject_kind = "readme_term",
+  provider = embedding_label,
+  text = embedding_terms
+) |>
+  ducksemantics_write_embeddings(conn, replace = TRUE)
+
+ducksemantics_embedding_query(
+  embeddings[match("short stature", embedding_terms), , drop = FALSE],
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  top_k = 3
+) |>
+  ducksemantics_embedding_search(conn)
+
+embedding_index <- ducksemantics_embedding_index_spec(
+  dimensions = ncol(embeddings),
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  hnsw = FALSE
+) |>
+  ducksemantics_materialize_embedding_index(conn)
+
+ducksemantics_embedding_query(
+  embeddings[match("cardiomyopathy", embedding_terms), , drop = FALSE],
+  table = embedding_index,
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  top_k = 3
+) |>
+  ducksemantics_embedding_search(conn)
+```
+
+The first semantic measurement is ontology clustering: embed every HPO and MONDO
+label, store the vectors in DuckDB, cluster them, and compare cluster
+assignments against direct graph edges. The embeddings are cached because this
+is a real BebeLM pass over the ontology labels.
+
+```{r}
+ontology_label_terms <- DBI::dbGetQuery(
+  conn,
+  paste(
+    "SELECT node_id, family, label",
+    "FROM semantic_nodes",
+    "WHERE label IS NOT NULL",
+    "ORDER BY family, node_id"
+  )
+)
+
+ontology_embedding_label <- "Rbebelm ontology label mean"
+ontology_label_embeddings <- ducksemantics_cache_rds(
+  file.path(cache_dir, "readme-bebel-ontology-label-embeddings.rds"),
+  function() ducksemantics_embed(embedding_provider, ontology_label_terms$label)
+)
+
+ducksemantics_embedding_batch(
+  embeddings = ontology_label_embeddings,
+  subject_id = ontology_label_terms$node_id,
+  subject_kind = "node",
+  provider = ontology_embedding_label,
+  text = ontology_label_terms$label
+) |>
+  ducksemantics_write_embeddings(conn, replace = TRUE)
+
+rfmalloc_runtime <- Rfmalloc::open_fmalloc(
+  file.path(cache_dir, "readme-ontology-clusters.fmalloc"),
+  mode = "scratch",
+  size_gb = 2
+)
+
+ontology_clusters <- ducksemantics_embedding_cluster_spec(
+  k = 32,
+  provider = ontology_embedding_label,
+  subject_kind = "node",
+  dimensions = ncol(ontology_label_embeddings),
+  run_id = "readme-ontology-label-clusters",
+  nstart = 2,
+  storage = "rfmalloc"
+) |>
+  ducksemantics_cluster_embeddings(conn, rfmalloc_runtime = rfmalloc_runtime)
+
+Rfmalloc::cleanup_fmalloc(rfmalloc_runtime)
+
+head(ontology_clusters$summary[order(-ontology_clusters$summary$size), ], 8)
+ducksemantics_embedding_cluster_graph_agreement(
+  conn,
+  ontology_clusters$cluster_run_id,
+  predicates = c("is_a", "part_of")
 )
 ```
 

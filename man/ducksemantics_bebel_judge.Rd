@@ -37,7 +37,7 @@ policy.}
 
 \item{parser}{Object implementing \link{DucksemanticsJudgmentParser}.}
 
-\item{on_event}{Optional Rbebelm event callback.}
+\item{on_event}{Optional Rbebelm event handler.}
 
 \item{record}{Append judgments to the judgment table?}
 

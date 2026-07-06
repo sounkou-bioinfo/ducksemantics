@@ -2,7 +2,8 @@
 
 `ducksemantics` is the package. It owns a DuckDB-native semantic graph and
 grounding layer now: schema creation, graph writes, alias indexing, mention
-grounding, closure SQL, typed model-provider interfaces, and benchmark
+grounding, native DuckDB vector storage, token-embedding storage, embedding
+clusters, closure SQL, typed model-provider interfaces, and benchmark
 measurement.
 
 HPO, MONDO, ORPHANET, study notes, memory, run ledgers, and local concept maps
@@ -96,7 +97,61 @@ semantic_judgments(
   recorded_at TIMESTAMP,
   attrs TEXT
 );
+
+semantic_embeddings(
+  subject_id TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  text TEXT,
+  dim INTEGER NOT NULL,
+  embedding FLOAT[],
+  attrs TEXT
+);
+
+semantic_token_embeddings(
+  block_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  token_index INTEGER NOT NULL,
+  token TEXT,
+  start_offset INTEGER,
+  end_offset INTEGER,
+  dim INTEGER NOT NULL,
+  embedding FLOAT[],
+  storage TEXT,
+  storage_ref TEXT,
+  attrs TEXT
+);
+
+semantic_embedding_clusters(
+  cluster_run_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  cluster_id INTEGER NOT NULL,
+  distance DOUBLE,
+  text TEXT,
+  attrs TEXT
+);
+
+semantic_embedding_centroids(
+  cluster_run_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  subject_kind TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  cluster_id INTEGER NOT NULL,
+  size INTEGER NOT NULL,
+  embedding FLOAT[],
+  attrs TEXT
+);
 ```
+
+`semantic_token_embeddings` is the table-space for later late-interaction
+scoring. The first working model stores pooled BebeLM embeddings in
+`semantic_embeddings`; token matrices become active when the provider exposes
+real token-level hidden states.
 
 ## Interfaces
 
@@ -111,6 +166,17 @@ Provider extension points are structural S7 interfaces, following the
 Concrete providers can be BebeLM/Rbebelm, a test fixture, a cloud model, a
 future Rust index, or a different local embedding model. The consuming code
 depends on the interface, not the provider.
+
+Store/query specs are S7 structs with property validators:
+
+- `DucksemanticsEmbeddingBatch`: rows to store in `semantic_embeddings`.
+- `DucksemanticsTokenEmbeddingBatch`: token rows grouped by `block_id` for
+  late-interaction scoring.
+- `DucksemanticsEmbeddingQuery`: vector search request over DuckDB arrays.
+- `DucksemanticsEmbeddingIndexSpec`: fixed-dimension materialized table and
+  optional HNSW index request.
+- `DucksemanticsEmbeddingClusterSpec`: k-means run over a provider/dimension
+  slice, with assignments and centroids stored in DuckDB.
 
 ## HPO/MONDO/ORPHANET Role
 
@@ -133,6 +199,10 @@ ducksemantics_init()
 ducksemantics_write_graph()
 ducksemantics_index_aliases()
 ducksemantics_annotate()
+ducksemantics_embedding_batch(...) |> ducksemantics_write_embeddings(conn)
+ducksemantics_embedding_query(...) |> ducksemantics_embedding_search(conn)
+ducksemantics_embedding_cluster_spec(...) |> ducksemantics_cluster_embeddings(conn)
+ducksemantics_embedding_cluster_graph_agreement(conn, cluster_run_id)
 ducksemantics_judge()
 suite |> ducksemantics_benchmark(conn)
 ```
@@ -141,7 +211,8 @@ suite |> ducksemantics_benchmark(conn)
 
 Benchmarking belongs to the package API. It should measure deterministic
 candidate generation, graph coverage, synonym handling, memory pressure,
-latency, embedding cost, and model-assisted judgment. The lexical DuckDB matcher
-sets the transparent floor; benchmark failures decide where synonym expansion,
-vector reranking, negation, uncertainty, and family-history adjudication
-actually improve HPO and MONDO tasks.
+latency, embedding cost, embedding cluster structure, and model-assisted
+judgment. The lexical DuckDB matcher sets the transparent floor; benchmark
+failures decide where synonym expansion, vector reranking, late interaction,
+negation, uncertainty, and family-history adjudication actually improve HPO and
+MONDO tasks.

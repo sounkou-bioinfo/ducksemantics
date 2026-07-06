@@ -2,10 +2,17 @@ schema <- ducksemantics_schema_sql()
 expect_true(any(grepl("semantic_nodes", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_aliases", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_judgments", schema, fixed = TRUE)))
+expect_true(any(grepl("semantic_embeddings", schema, fixed = TRUE)))
+expect_true(any(grepl("semantic_token_embeddings", schema, fixed = TRUE)))
+expect_true(any(grepl("semantic_embedding_clusters", schema, fixed = TRUE)))
+expect_true(any(grepl("semantic_embedding_centroids", schema, fixed = TRUE)))
 
 tables <- ducksemantics_tables()
 expect_equal(tables[["nodes"]], "semantic_nodes")
 expect_equal(tables[["entailed_edges"]], "semantic_entailed_edges")
+expect_equal(tables[["embeddings"]], "semantic_embeddings")
+expect_equal(tables[["token_embeddings"]], "semantic_token_embeddings")
+expect_equal(tables[["embedding_clusters"]], "semantic_embedding_clusters")
 
 projection <- ducksemantics_projection_sql(
   source_table = "source_edges",
@@ -121,9 +128,9 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
   ducksemantics_write_graph(
     conn,
     nodes = data.frame(
-      node_id = c("HP:0004322", "HP:0001250"),
+      node_id = c("HP:0004322", "HP:0001250", "HP:0000001"),
       family = "HPO",
-      label = c("Short stature", "Seizure"),
+      label = c("Short stature", "Seizure", "Phenotypic abnormality"),
       stringsAsFactors = FALSE
     ),
     replace = TRUE,
@@ -131,6 +138,12 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
       node_id = c("HP:0004322", "HP:0004322", "HP:0001250"),
       alias = c("short stature", "short height", "seizures"),
       alias_kind = c("label", "exact_synonym", "exact_synonym"),
+      stringsAsFactors = FALSE
+    ),
+    edges = data.frame(
+      from_id = c("HP:0004322", "HP:0001250"),
+      predicate = "is_a",
+      to_id = "HP:0000001",
       stringsAsFactors = FALSE
     )
   )
@@ -142,6 +155,96 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
   )
   expect_equal(sort(hits$node_id), c("HP:0001250", "HP:0004322"))
   expect_true(all(hits$method == "lexical_alias"))
+
+  vector_batch <- ducksemantics_embedding_batch(
+    embeddings = matrix(
+      c(
+        1.0, 0.0, 0.0,
+        0.9, 0.1, 0.0,
+        0.0, 1.0, 0.0,
+        0.45, 0.55, 0.0
+      ),
+      ncol = 3L,
+      byrow = TRUE
+    ),
+    subject_id = c("HP:0004322", "HP:0004322_synonym", "HP:0001250", "HP:0000001"),
+    subject_kind = "node",
+    provider = "tiny",
+    text = c("short stature", "short height", "seizure", "phenotypic abnormality")
+  )
+  vector_rows <- vector_batch |>
+    ducksemantics_write_embeddings(conn, replace = TRUE)
+  expect_equal(nrow(vector_rows), 4L)
+
+  token_batch <- ducksemantics_token_embedding_batch(
+    embeddings = matrix(
+      c(
+        1.0, 0.0,
+        0.8, 0.2,
+        0.0, 1.0
+      ),
+      ncol = 2L,
+      byrow = TRUE
+    ),
+    subject_id = c("HP:0004322", "HP:0004322", "HP:0001250"),
+    subject_kind = "node",
+    provider = "tiny-token",
+    token = c("short", "stature", "seizure")
+  )
+  token_rows <- token_batch |>
+    ducksemantics_write_token_embeddings(conn, replace = TRUE)
+  expect_equal(nrow(token_rows), 3L)
+  expect_equal(token_rows$token_index, c(0L, 1L, 0L))
+
+  vector_hits <- ducksemantics_embedding_query(
+    c(1, 0, 0),
+    provider = "tiny",
+    subject_kind = "node",
+    top_k = 2
+  ) |>
+    ducksemantics_embedding_search(conn)
+  expect_equal(vector_hits$subject_id[[1L]], "HP:0004322")
+  expect_equal(nrow(vector_hits), 2L)
+
+  materialized <- ducksemantics_embedding_index_spec(
+    dimensions = 3,
+    provider = "tiny",
+    subject_kind = "node",
+    hnsw = FALSE
+  ) |>
+    ducksemantics_materialize_embedding_index(conn)
+  indexed_hits <- ducksemantics_embedding_query(
+    c(0, 1, 0),
+    table = materialized,
+    provider = "tiny",
+    subject_kind = "node",
+    top_k = 1
+  ) |>
+    ducksemantics_embedding_search(conn)
+  expect_equal(indexed_hits$subject_id[[1L]], "HP:0001250")
+
+  clusters <- ducksemantics_embedding_cluster_spec(
+    k = 2L,
+    provider = "tiny",
+    subject_kind = "node",
+    dimensions = 3L,
+    run_id = "tiny-embedding-clusters",
+    nstart = 2L
+  ) |>
+    ducksemantics_cluster_embeddings(conn)
+  expect_equal(nrow(clusters$assignments), 4L)
+  expect_equal(nrow(clusters$centroids), 2L)
+  expect_equal(sum(clusters$summary$size), 4L)
+
+  stored_clusters <- ducksemantics_embedding_cluster_summary(conn, "tiny-embedding-clusters")
+  expect_equal(sum(stored_clusters$size), 4)
+
+  graph_agreement <- ducksemantics_embedding_cluster_graph_agreement(
+    conn,
+    "tiny-embedding-clusters",
+    predicates = "is_a"
+  )
+  expect_equal(graph_agreement$edge_count, 2)
 
   runner <- ducksemantics_prompt_runner(function(prompt) {
     jsonlite::toJSON(

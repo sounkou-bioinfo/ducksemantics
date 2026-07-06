@@ -10,9 +10,26 @@ reference:
       - ducksemantics_schema_sql
       - ducksemantics_tables
       - ducksemantics_write_graph
+      - ducksemantics_embedding_batch
+      - ducksemantics_write_embeddings
+      - ducksemantics_token_embedding_batch
+      - ducksemantics_write_token_embeddings
+      - ducksemantics_embedding_query
+      - ducksemantics_embedding_search
+      - ducksemantics_embedding_index_spec
+      - ducksemantics_materialize_embedding_index
+      - ducksemantics_embedding_cluster_spec
+      - ducksemantics_cluster_embeddings
+      - ducksemantics_embedding_cluster_summary
+      - ducksemantics_embedding_cluster_graph_agreement
       - ducksemantics_projection_sql
       - ducksemantics_closure_sql
       - ducksemantics_index_stats
+      - DucksemanticsEmbeddingBatch
+      - DucksemanticsTokenEmbeddingBatch
+      - DucksemanticsEmbeddingQuery
+      - DucksemanticsEmbeddingIndexSpec
+      - DucksemanticsEmbeddingClusterSpec
   - title: Grounding
     contents:
       - ducksemantics_normalize

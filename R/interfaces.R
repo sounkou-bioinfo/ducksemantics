@@ -199,7 +199,7 @@ ducksemantics_lexical_annotator_class <- S7::new_class(
 #' @export
 ducksemantics_prompt_runner <- function(fun, label = "function") {
   if (!is.function(fun)) stop("`fun` must be a function.", call. = FALSE)
-  check_scalar_character(label, "label")
+  S7::prop(DucksemanticsScalarText(value = label), "value")
   ducksemantics_function_prompt_runner_class(fun = fun, label = label)
 }
 
@@ -212,7 +212,7 @@ ducksemantics_prompt_runner <- function(fun, label = "function") {
 #' @export
 ducksemantics_embedding_provider <- function(fun, label = "function") {
   if (!is.function(fun)) stop("`fun` must be a function.", call. = FALSE)
-  check_scalar_character(label, "label")
+  S7::prop(DucksemanticsScalarText(value = label), "value")
   ducksemantics_function_embedding_provider_class(fun = fun, label = label)
 }
 
@@ -231,8 +231,8 @@ ducksemantics_bebel_embedding_provider <- function(model,
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
     stop("Rbebelm is required for the BebeLM embedding provider.", call. = FALSE)
   }
-  check_flag(add_bos, "add_bos")
-  check_flag(normalize, "normalize")
+  S7::prop(DucksemanticsFlag(value = add_bos), "value")
+  S7::prop(DucksemanticsFlag(value = normalize), "value")
   pooling <- match.arg(pooling)
   ducksemantics_bebel_embedding_provider_class(
     model = model,
@@ -271,12 +271,12 @@ ducksemantics_lexical_annotator <- function() {
 }
 
 S7::method(ducksemantics_run, ducksemantics_function_prompt_runner_class) <- function(provider, prompt, ...) {
-  check_scalar_character(prompt, "prompt")
+  S7::prop(DucksemanticsScalarText(value = prompt), "value")
   ducksemantics_response_text(provider@fun(prompt, ...))
 }
 
 S7::method(ducksemantics_run, ducksemantics_bebel_runner_class) <- function(provider, prompt, ...) {
-  check_scalar_character(prompt, "prompt")
+  S7::prop(DucksemanticsScalarText(value = prompt), "value")
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
     stop("Rbebelm is required for BebeLM judgment.", call. = FALSE)
   }
@@ -289,7 +289,9 @@ S7::method(ducksemantics_embed, ducksemantics_function_embedding_provider_class)
   if (!is.character(text) || anyNA(text)) {
     stop("`text` must be a character vector without NA.", call. = FALSE)
   }
-  ducksemantics_validate_embedding_matrix(provider@fun(text, ...), length(text))
+  out <- provider@fun(text, ...)
+  if (is.data.frame(out)) out <- as.matrix(out)
+  S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
 }
 
 S7::method(ducksemantics_embed, ducksemantics_bebel_embedding_provider_class) <- function(provider, text, ...) {
@@ -303,13 +305,13 @@ S7::method(ducksemantics_embed, ducksemantics_bebel_embedding_provider_class) <-
     normalize = provider@normalize,
     pooling = provider@pooling
   )
-  ducksemantics_validate_embedding_matrix(out, length(text))
+  S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
 }
 
 S7::method(ducksemantics_parse, ducksemantics_json_judgment_parser_class) <- function(parser, response, ...) {
   parsed <- ducksemantics_parse_json_response(response)
   parsed <- ducksemantics_normalize_judgment_payload(parsed)
-  ducksemantics_check_data_frame(parsed, "parsed")
+  S7::prop(DucksemanticsTable(value = parsed, required = character(), allow_empty = TRUE), "value")
 }
 
 S7::method(ducksemantics_parse, ducksemantics_bebel_tool_judgment_parser_class) <- function(parser, response, ...) {
@@ -352,24 +354,8 @@ S7::method(ducksemantics_ground, ducksemantics_lexical_annotator_class) <- funct
   )
 }
 
-ducksemantics_validate_embedding_matrix <- function(x, n_text) {
-  if (is.data.frame(x)) {
-    x <- as.matrix(x)
-  }
-  if (!is.matrix(x) || !is.numeric(x)) {
-    stop("Embedding providers must return a numeric matrix.", call. = FALSE)
-  }
-  if (nrow(x) != n_text) {
-    stop("Embedding matrix must have one row per input text.", call. = FALSE)
-  }
-  if (!ncol(x)) {
-    stop("Embedding matrix must have at least one column.", call. = FALSE)
-  }
-  x
-}
-
 ducksemantics_parse_bebel_tool_calls <- function(response) {
-  check_scalar_character(response, "response")
+  S7::prop(DucksemanticsScalarText(value = response), "value")
   ducksemantics_parse_bebel_tool_call_blocks(ducksemantics_bebel_tool_blocks(response))
 }
 
@@ -389,7 +375,7 @@ ducksemantics_parse_json_candidates <- function(candidates) {
       next
     }
     parsed <- ducksemantics_normalize_judgment_payload(parsed)
-    return(ducksemantics_check_data_frame(parsed, "parsed"))
+    return(S7::prop(DucksemanticsTable(value = parsed, required = character(), allow_empty = TRUE), "value"))
   }
   stop("BebeLM response did not contain judgment tool calls or JSON.", call. = FALSE)
 }

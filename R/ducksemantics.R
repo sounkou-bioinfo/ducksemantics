@@ -11,7 +11,7 @@ DUCKSEMANTICS_SCHEMA_VERSION <- "ducksemantics.schema.v0"
 #' @return A character vector of SQL statements.
 #' @export
 ducksemantics_schema_sql <- function(prefix = "semantic") {
-  prefix <- ducksemantics_check_identifier(prefix, "prefix")
+  prefix <- S7::prop(DucksemanticsSqlIdentifier(value = prefix, qualified = FALSE), "value")
   tables <- ducksemantics_tables(prefix)
 
   c(
@@ -103,6 +103,83 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "recorded_at TIMESTAMP, ",
       "attrs TEXT",
       ")"
+    ),
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ", ducksemantics_quote_ident(tables[["embeddings"]]), " (",
+      "subject_id TEXT NOT NULL, ",
+      "subject_kind TEXT NOT NULL, ",
+      "provider TEXT NOT NULL, ",
+      "text TEXT, ",
+      "dim INTEGER NOT NULL, ",
+      "embedding FLOAT[], ",
+      "attrs TEXT",
+      ")"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["embeddings"]], "_subject_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["embeddings"]]), " (subject_kind, subject_id, provider)"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["embeddings"]], "_dim_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["embeddings"]]), " (provider, dim)"
+    ),
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ", ducksemantics_quote_ident(tables[["token_embeddings"]]), " (",
+      "block_id TEXT NOT NULL, ",
+      "subject_id TEXT NOT NULL, ",
+      "subject_kind TEXT NOT NULL, ",
+      "provider TEXT NOT NULL, ",
+      "token_index INTEGER NOT NULL, ",
+      "token TEXT, ",
+      "start_offset INTEGER, ",
+      "end_offset INTEGER, ",
+      "dim INTEGER NOT NULL, ",
+      "embedding FLOAT[], ",
+      "storage TEXT, ",
+      "storage_ref TEXT, ",
+      "attrs TEXT",
+      ")"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["token_embeddings"]], "_subject_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["token_embeddings"]]), " (subject_kind, subject_id, provider, block_id)"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["token_embeddings"]], "_dim_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["token_embeddings"]]), " (provider, dim)"
+    ),
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ", ducksemantics_quote_ident(tables[["embedding_clusters"]]), " (",
+      "cluster_run_id TEXT NOT NULL, ",
+      "subject_id TEXT NOT NULL, ",
+      "subject_kind TEXT NOT NULL, ",
+      "provider TEXT NOT NULL, ",
+      "dim INTEGER NOT NULL, ",
+      "cluster_id INTEGER NOT NULL, ",
+      "distance DOUBLE, ",
+      "text TEXT, ",
+      "attrs TEXT",
+      ")"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["embedding_clusters"]], "_run_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["embedding_clusters"]]), " (cluster_run_id, cluster_id)"
+    ),
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ", ducksemantics_quote_ident(tables[["embedding_centroids"]]), " (",
+      "cluster_run_id TEXT NOT NULL, ",
+      "provider TEXT NOT NULL, ",
+      "subject_kind TEXT NOT NULL, ",
+      "dim INTEGER NOT NULL, ",
+      "cluster_id INTEGER NOT NULL, ",
+      "size INTEGER NOT NULL, ",
+      "embedding FLOAT[], ",
+      "attrs TEXT",
+      ")"
+    ),
+    paste0(
+      "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(paste0(tables[["embedding_centroids"]], "_run_idx")),
+      " ON ", ducksemantics_quote_ident(tables[["embedding_centroids"]]), " (cluster_run_id, cluster_id)"
     )
   )
 }
@@ -113,7 +190,7 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
 #' @return A named character vector.
 #' @export
 ducksemantics_tables <- function(prefix = "semantic") {
-  prefix <- ducksemantics_check_identifier(prefix, "prefix")
+  prefix <- S7::prop(DucksemanticsSqlIdentifier(value = prefix, qualified = FALSE), "value")
   c(
     nodes = paste0(prefix, "_nodes"),
     aliases = paste0(prefix, "_aliases"),
@@ -121,7 +198,11 @@ ducksemantics_tables <- function(prefix = "semantic") {
     edges = paste0(prefix, "_edges"),
     entailed_edges = paste0(prefix, "_entailed_edges"),
     mentions = paste0(prefix, "_mentions"),
-    judgments = paste0(prefix, "_judgments")
+    judgments = paste0(prefix, "_judgments"),
+    embeddings = paste0(prefix, "_embeddings"),
+    token_embeddings = paste0(prefix, "_token_embeddings"),
+    embedding_clusters = paste0(prefix, "_embedding_clusters"),
+    embedding_centroids = paste0(prefix, "_embedding_centroids")
   )
 }
 
@@ -129,15 +210,18 @@ ducksemantics_tables <- function(prefix = "semantic") {
 #'
 #' @param dbdir DuckDB database path, or `":memory:"`.
 #' @param read_only Open read-only?
+#' @param array DuckDB array conversion mode. The default enables native vector
+#'   columns to round-trip through R matrices.
 #' @return A DBI connection.
 #' @export
-ducksemantics_connect <- function(dbdir = ":memory:", read_only = FALSE) {
+ducksemantics_connect <- function(dbdir = ":memory:", read_only = FALSE, array = "matrix") {
   if (!requireNamespace("duckdb", quietly = TRUE)) {
     stop("The duckdb R package is required to create a DuckDB connection.", call. = FALSE)
   }
-  check_scalar_character(dbdir, "dbdir")
-  check_flag(read_only, "read_only")
-  DBI::dbConnect(duckdb::duckdb(), dbdir = dbdir, read_only = read_only)
+  S7::prop(DucksemanticsScalarText(value = dbdir), "value")
+  S7::prop(DucksemanticsFlag(value = read_only), "value")
+  S7::prop(DucksemanticsScalarText(value = array), "value")
+  DBI::dbConnect(duckdb::duckdb(), dbdir = dbdir, read_only = read_only, array = array)
 }
 
 #' Initialize semantic graph tables
@@ -147,7 +231,7 @@ ducksemantics_connect <- function(dbdir = ":memory:", read_only = FALSE) {
 #' @return Invisibly, `conn`.
 #' @export
 ducksemantics_init <- function(conn, prefix = "semantic") {
-  ducksemantics_check_connection(conn)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
   for (sql in ducksemantics_schema_sql(prefix)) {
     DBI::dbExecute(conn, sql)
   }
@@ -177,8 +261,8 @@ ducksemantics_write_graph <- function(conn,
                                       replace = FALSE,
                                       index = TRUE) {
   ducksemantics_init(conn, prefix)
-  check_flag(replace, "replace")
-  check_flag(index, "index")
+  S7::prop(DucksemanticsFlag(value = replace), "value")
+  S7::prop(DucksemanticsFlag(value = index), "value")
   tables <- ducksemantics_tables(prefix)
 
   if (!is.null(nodes)) {
@@ -215,10 +299,10 @@ ducksemantics_cache_file <- function(url,
                                      filename = basename(url),
                                      cache_dir = tools::R_user_dir("ducksemantics", "cache"),
                                      refresh = FALSE) {
-  check_scalar_character(url, "url")
-  check_scalar_character(filename, "filename")
-  check_scalar_character(cache_dir, "cache_dir")
-  check_flag(refresh, "refresh")
+  S7::prop(DucksemanticsScalarText(value = url), "value")
+  S7::prop(DucksemanticsScalarText(value = filename), "value")
+  S7::prop(DucksemanticsScalarText(value = cache_dir), "value")
+  S7::prop(DucksemanticsFlag(value = refresh), "value")
   if (!dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
   }
@@ -238,11 +322,11 @@ ducksemantics_cache_file <- function(url,
 #' @return The cached R object.
 #' @export
 ducksemantics_cache_rds <- function(path, compute, refresh = FALSE) {
-  check_scalar_character(path, "path")
+  S7::prop(DucksemanticsScalarText(value = path), "value")
   if (!is.function(compute)) {
     stop("`compute` must be a function.", call. = FALSE)
   }
-  check_flag(refresh, "refresh")
+  S7::prop(DucksemanticsFlag(value = refresh), "value")
   cache_dir <- dirname(path)
   if (!dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
@@ -265,10 +349,10 @@ ducksemantics_read_obo <- function(path,
                                    family,
                                    source = basename(path),
                                    include_obsolete = FALSE) {
-  check_scalar_character(path, "path")
-  check_scalar_character(family, "family")
-  check_scalar_character(source, "source")
-  check_flag(include_obsolete, "include_obsolete")
+  S7::prop(DucksemanticsScalarText(value = path), "value")
+  S7::prop(DucksemanticsScalarText(value = family), "value")
+  S7::prop(DucksemanticsScalarText(value = source), "value")
+  S7::prop(DucksemanticsFlag(value = include_obsolete), "value")
   if (!file.exists(path)) {
     stop("OBO file does not exist: ", path, call. = FALSE)
   }
@@ -418,7 +502,7 @@ ducksemantics_normalize <- function(text) {
 #'   offset, end offset, and token index.
 #' @export
 ducksemantics_tokens <- function(text) {
-  check_scalar_character(text, "text")
+  S7::prop(DucksemanticsScalarText(value = text), "value")
   hits <- gregexpr("[[:alnum:]]+", text, perl = TRUE)[[1L]]
   if (identical(hits, -1L)) {
     return(data.frame(
@@ -449,7 +533,7 @@ ducksemantics_tokens <- function(text) {
 #' @return Invisibly, the alias index table name.
 #' @export
 ducksemantics_index_aliases <- function(conn, prefix = "semantic") {
-  ducksemantics_check_connection(conn)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
   tables <- ducksemantics_tables(prefix)
   aliases <- DBI::dbGetQuery(
     conn,
@@ -503,11 +587,11 @@ ducksemantics_annotate <- function(conn,
                                    prefix = "semantic",
                                    longest_match = TRUE,
                                    record = FALSE) {
-  ducksemantics_check_connection(conn)
-  check_scalar_character(text, "text")
-  if (!is.null(document_id)) check_scalar_character(document_id, "document_id")
-  check_flag(longest_match, "longest_match")
-  check_flag(record, "record")
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  S7::prop(DucksemanticsScalarText(value = text), "value")
+  if (!is.null(document_id)) S7::prop(DucksemanticsScalarText(value = document_id), "value")
+  S7::prop(DucksemanticsFlag(value = longest_match), "value")
+  S7::prop(DucksemanticsFlag(value = record), "value")
   tables <- ducksemantics_tables(prefix)
   if (!DBI::dbExistsTable(conn, tables[["alias_index"]])) {
     ducksemantics_index_aliases(conn, prefix = prefix)
@@ -592,7 +676,7 @@ ducksemantics_judgment_prompt <- function(text,
                                           mentions,
                                           graph_context = NULL,
                                           instructions = ducksemantics_default_judgment_instructions()) {
-  check_scalar_character(text, "text")
+  S7::prop(DucksemanticsScalarText(value = text), "value")
   ducksemantics_require_jsonlite()
   instructions <- ducksemantics_prompt_text(instructions, "instructions")
   mention_payload <- ducksemantics_mentions_payload(mentions)
@@ -615,7 +699,7 @@ ducksemantics_judgment_prompt <- function(text,
 #' Create a BebeLM prompt runner
 #'
 #' @param agent A `Rbebelm` agent object.
-#' @param on_event Optional Rbebelm event callback.
+#' @param on_event Optional Rbebelm event handler.
 #' @return An object implementing [DucksemanticsPromptRunner].
 #' @export
 ducksemantics_bebel_runner <- function(agent, on_event = NULL) {
@@ -659,14 +743,14 @@ ducksemantics_judge <- function(text,
                                 record = !is.null(conn),
                                 model = "semantic-runner",
                                 ...) {
-  check_scalar_character(text, "text")
+  S7::prop(DucksemanticsScalarText(value = text), "value")
   s7contract::assert_implements(runner, DucksemanticsPromptRunner, arg = "runner")
   s7contract::assert_implements(parser, DucksemanticsJudgmentParser, arg = "parser")
   if (!is.function(prompt_builder)) {
     stop("`prompt_builder` must be a function.", call. = FALSE)
   }
-  check_flag(record, "record")
-  check_scalar_character(model, "model")
+  S7::prop(DucksemanticsFlag(value = record), "value")
+  S7::prop(DucksemanticsScalarText(value = model), "value")
 
   prompt <- prompt_builder(
     text = text,
@@ -699,7 +783,7 @@ ducksemantics_judge <- function(text,
 #' @param instructions Character scalar or vector containing the adjudication
 #'   policy.
 #' @param parser Object implementing [DucksemanticsJudgmentParser].
-#' @param on_event Optional Rbebelm event callback.
+#' @param on_event Optional Rbebelm event handler.
 #' @param record Append judgments to the judgment table?
 #' @param model Model label recorded with judgments.
 #' @return A data frame of judgment rows.
@@ -749,6 +833,405 @@ ducksemantics_record_judgments <- function(conn, judgments, prefix = "semantic")
   invisible(judgments)
 }
 
+#' Store an embedding batch in DuckDB
+#'
+#' Embeddings are stored in DuckDB as native `FLOAT[]` vectors. Similarity search
+#' casts those vectors to fixed-size `FLOAT[N]` arrays so DuckDB's vector
+#' functions and optional HNSW index can be used directly.
+#'
+#' @param batch A [DucksemanticsEmbeddingBatch] object from
+#'   [ducksemantics_embedding_batch()].
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @param replace Delete existing embeddings for the same subjects and provider
+#'   before inserting?
+#' @return Invisibly, the written embedding rows.
+#' @export
+ducksemantics_write_embeddings <- function(batch,
+                                           conn,
+                                           prefix = "semantic",
+                                           replace = FALSE) {
+  if (!S7::S7_inherits(batch, DucksemanticsEmbeddingBatch)) {
+    stop("`batch` must be a DucksemanticsEmbeddingBatch from ducksemantics_embedding_batch().", call. = FALSE)
+  }
+  ducksemantics_init(conn, prefix)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  replace <- S7::prop(DucksemanticsFlag(value = replace), "value")
+  rows <- ducksemantics_embedding_rows(batch)
+  subject_kind <- S7::prop(batch, "subject_kind")
+  provider <- S7::prop(batch, "provider")
+  tables <- ducksemantics_tables(prefix)
+  if (isTRUE(replace) && nrow(rows)) {
+    delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
+    DBI::dbExecute(
+      conn,
+      paste0(
+        "DELETE FROM ", ducksemantics_quote_ident(tables[["embeddings"]]),
+        " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
+        " AND provider = ", ducksemantics_quote_string(provider),
+        " AND subject_id IN (", delete_ids, ")"
+      )
+    )
+  }
+  if (nrow(rows)) {
+    DBI::dbAppendTable(conn, tables[["embeddings"]], rows)
+  }
+  invisible(rows)
+}
+
+#' Store token embeddings for late-interaction scoring
+#'
+#' Token embeddings are grouped by `block_id`, so a later native scorer can
+#' compare query-token and document-token matrices without changing the graph
+#' schema. The first active embedding path remains pooled vectors in
+#' `semantic_embeddings`.
+#'
+#' @param batch A `DucksemanticsTokenEmbeddingBatch` object from
+#'   `ducksemantics_token_embedding_batch()`.
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @param replace Delete existing token rows for the same subjects and provider
+#'   before inserting?
+#' @return Invisibly, the written token embedding rows.
+#' @export
+ducksemantics_write_token_embeddings <- function(batch,
+                                                 conn,
+                                                 prefix = "semantic",
+                                                 replace = FALSE) {
+  if (!S7::S7_inherits(batch, DucksemanticsTokenEmbeddingBatch)) {
+    stop("`batch` must be a DucksemanticsTokenEmbeddingBatch from ducksemantics_token_embedding_batch().", call. = FALSE)
+  }
+  ducksemantics_init(conn, prefix)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  replace <- S7::prop(DucksemanticsFlag(value = replace), "value")
+  rows <- ducksemantics_token_embedding_rows(batch)
+  subject_kind <- S7::prop(batch, "subject_kind")
+  provider <- S7::prop(batch, "provider")
+  tables <- ducksemantics_tables(prefix)
+  if (isTRUE(replace) && nrow(rows)) {
+    delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
+    DBI::dbExecute(
+      conn,
+      paste0(
+        "DELETE FROM ", ducksemantics_quote_ident(tables[["token_embeddings"]]),
+        " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
+        " AND provider = ", ducksemantics_quote_string(provider),
+        " AND subject_id IN (", delete_ids, ")"
+      )
+    )
+  }
+  if (nrow(rows)) {
+    DBI::dbAppendTable(conn, tables[["token_embeddings"]], rows)
+  }
+  invisible(rows)
+}
+
+#' Search embeddings with DuckDB vector functions
+#'
+#' @param query A [DucksemanticsEmbeddingQuery] object from
+#'   [ducksemantics_embedding_query()].
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @return Data frame ordered by best match.
+#' @export
+ducksemantics_embedding_search <- function(query,
+                                           conn,
+                                           prefix = "semantic") {
+  if (!S7::S7_inherits(query, DucksemanticsEmbeddingQuery)) {
+    query <- ducksemantics_embedding_query(query)
+  }
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  embedding <- S7::prop(query, "embedding")
+  provider <- S7::prop(query, "provider")
+  subject_kind <- S7::prop(query, "subject_kind")
+  top_k <- as.integer(S7::prop(query, "top_k"))
+  metric <- S7::prop(query, "metric")
+  dim <- length(embedding)
+  vector_sql <- ducksemantics_float_array_literal(embedding)
+  tables <- ducksemantics_tables(prefix)
+  table <- S7::prop(query, "table") %||% tables[["embeddings"]]
+  table <- S7::prop(DucksemanticsSqlIdentifier(value = table, qualified = TRUE), "value")
+  embedded_sql <- paste0("embedding::FLOAT[", dim, "]")
+  score_sql <- switch(
+    metric,
+    cosine = paste0("array_cosine_similarity(", embedded_sql, ", ", vector_sql, ")"),
+    cosine_distance = paste0("array_cosine_distance(", embedded_sql, ", ", vector_sql, ")"),
+    l2 = paste0("array_distance(", embedded_sql, ", ", vector_sql, ")"),
+    inner_product = paste0("array_inner_product(", embedded_sql, ", ", vector_sql, ")")
+  )
+  order <- if (metric %in% c("cosine", "inner_product")) "DESC" else "ASC"
+  filters <- c(paste0("dim = ", dim))
+  if (!is.null(provider)) {
+    filters <- c(filters, paste0("provider = ", ducksemantics_quote_string(provider)))
+  }
+  if (!is.null(subject_kind)) {
+    filters <- c(filters, paste0("subject_kind = ", ducksemantics_quote_string(subject_kind)))
+  }
+  DBI::dbGetQuery(
+    conn,
+    paste0(
+      "SELECT subject_id, subject_kind, provider, text, dim, ",
+      score_sql, " AS score ",
+      "FROM ", ducksemantics_quote_ident(table),
+      " WHERE ", paste(filters, collapse = " AND "),
+      " ORDER BY score ", order,
+      " LIMIT ", top_k
+    )
+  )
+}
+
+#' Materialize a fixed-dimension embedding table
+#'
+#' DuckDB's HNSW index requires a fixed-size vector type such as `FLOAT[384]`.
+#' This function projects rows from `semantic_embeddings` into a dimensioned
+#' table and can create a native HNSW index on that table.
+#'
+#' @param spec A [DucksemanticsEmbeddingIndexSpec] object from
+#'   [ducksemantics_embedding_index_spec()].
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @return Target table name.
+#' @export
+ducksemantics_materialize_embedding_index <- function(spec,
+                                                      conn,
+                                                      prefix = "semantic") {
+  if (!S7::S7_inherits(spec, DucksemanticsEmbeddingIndexSpec)) {
+    spec <- ducksemantics_embedding_index_spec(spec)
+  }
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  dimensions <- as.integer(S7::prop(spec, "dimensions"))
+  provider <- S7::prop(spec, "provider")
+  subject_kind <- S7::prop(spec, "subject_kind")
+  hnsw <- S7::prop(spec, "hnsw")
+  metric <- S7::prop(spec, "metric")
+  load_vss <- S7::prop(spec, "load_vss")
+  tables <- ducksemantics_tables(prefix)
+  target <- S7::prop(spec, "table") %||% paste0(prefix, "_embedding_index_", dimensions)
+  target <- S7::prop(DucksemanticsSqlIdentifier(value = target, qualified = TRUE), "value")
+  filters <- c(paste0("dim = ", dimensions))
+  if (!is.null(provider)) {
+    filters <- c(filters, paste0("provider = ", ducksemantics_quote_string(provider)))
+  }
+  if (!is.null(subject_kind)) {
+    filters <- c(filters, paste0("subject_kind = ", ducksemantics_quote_string(subject_kind)))
+  }
+  DBI::dbExecute(
+    conn,
+    paste0(
+      "CREATE OR REPLACE TABLE ", ducksemantics_quote_ident(target), " AS ",
+      "SELECT subject_id, subject_kind, provider, text, dim, ",
+      "embedding::FLOAT[", dimensions, "] AS embedding, attrs ",
+      "FROM ", ducksemantics_quote_ident(tables[["embeddings"]]),
+      " WHERE ", paste(filters, collapse = " AND ")
+    )
+  )
+  if (isTRUE(hnsw)) {
+    if (isTRUE(load_vss)) {
+      DBI::dbExecute(conn, "LOAD vss")
+    }
+    index_name <- paste0(gsub("[^A-Za-z0-9_]", "_", target), "_hnsw_idx")
+    DBI::dbExecute(conn, paste0("DROP INDEX IF EXISTS ", ducksemantics_quote_ident(index_name)))
+    DBI::dbExecute(
+      conn,
+      paste0(
+        "CREATE INDEX ", ducksemantics_quote_ident(index_name),
+        " ON ", ducksemantics_quote_ident(target),
+        " USING HNSW (embedding) WITH (metric = ", ducksemantics_quote_string(metric), ")"
+      )
+    )
+  }
+  target
+}
+
+#' Cluster embedding rows
+#'
+#' Clustering writes assignments and centroids back to DuckDB. It is intended as
+#' a first measurement surface for whether a provider's embeddings recover
+#' ontology structure before adding graph-aware or late-interaction scoring.
+#'
+#' @param spec A `DucksemanticsEmbeddingClusterSpec` object from
+#'   `ducksemantics_embedding_cluster_spec()`.
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @param replace Delete rows for `spec$run_id` before writing?
+#' @param rfmalloc_runtime Optional Rfmalloc runtime used when
+#'   `storage = "rfmalloc"`.
+#' @return A list with assignments, centroids, summary, and the `kmeans` object.
+#' @export
+ducksemantics_cluster_embeddings <- function(spec,
+                                             conn,
+                                             prefix = "semantic",
+                                             replace = TRUE,
+                                             rfmalloc_runtime = NULL) {
+  if (!S7::S7_inherits(spec, DucksemanticsEmbeddingClusterSpec)) {
+    spec <- ducksemantics_embedding_cluster_spec(spec)
+  }
+  ducksemantics_init(conn, prefix)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  replace <- S7::prop(DucksemanticsFlag(value = replace), "value")
+  tables <- ducksemantics_tables(prefix)
+  rows <- ducksemantics_embedding_table_rows(conn, spec, prefix = prefix)
+  if (!nrow(rows)) {
+    stop("No embedding rows matched the clustering specification.", call. = FALSE)
+  }
+  dimensions <- unique(as.integer(rows$dim))
+  if (length(dimensions) != 1L) {
+    stop("Clustering requires one embedding dimension; set `dimensions` in the cluster spec.", call. = FALSE)
+  }
+  k <- as.integer(S7::prop(spec, "k"))
+  if (k >= nrow(rows)) {
+    stop("`k` must be smaller than the number of matched embedding rows.", call. = FALSE)
+  }
+  x <- ducksemantics_embedding_column_matrix(
+    rows$embedding,
+    dimensions,
+    storage = S7::prop(spec, "storage"),
+    rfmalloc_runtime = rfmalloc_runtime
+  )
+
+  seed <- as.integer(S7::prop(spec, "seed"))
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+    get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  } else {
+    NULL
+  }
+  on.exit({
+    if (is.null(old_seed)) {
+      rm(".Random.seed", envir = .GlobalEnv)
+    } else {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+  set.seed(seed)
+  fit <- stats::kmeans(
+    x,
+    centers = k,
+    nstart = as.integer(S7::prop(spec, "nstart")),
+    iter.max = as.integer(S7::prop(spec, "max_iter"))
+  )
+
+  run_id <- S7::prop(spec, "run_id")
+  assignments <- ducksemantics_cluster_assignment_rows(rows, x, fit, run_id)
+  centroids <- ducksemantics_cluster_centroid_rows(rows, fit, run_id, dimensions)
+  if (isTRUE(replace)) {
+    DBI::dbExecute(
+      conn,
+      paste0(
+        "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_clusters"]]),
+        " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+      )
+    )
+    DBI::dbExecute(
+      conn,
+      paste0(
+        "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_centroids"]]),
+        " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+      )
+    )
+  }
+  DBI::dbAppendTable(conn, tables[["embedding_clusters"]], assignments)
+  DBI::dbAppendTable(conn, tables[["embedding_centroids"]], centroids)
+
+  summary <- data.frame(
+    cluster_run_id = run_id,
+    cluster_id = seq_len(k),
+    size = as.integer(fit$size),
+    withinss = as.numeric(fit$withinss),
+    mean_distance = vapply(seq_len(k), function(cluster_id) {
+      distance <- assignments$distance[assignments$cluster_id == cluster_id]
+      if (length(distance)) mean(distance) else NA_real_
+    }, numeric(1)),
+    stringsAsFactors = FALSE
+  )
+  out <- list(
+    cluster_run_id = run_id,
+    assignments = assignments,
+    centroids = centroids,
+    summary = summary,
+    fit = fit
+  )
+  class(out) <- c("ducksemantics_embedding_cluster_result", "list")
+  out
+}
+
+#' Summarize stored embedding clusters
+#'
+#' @param conn DBI connection.
+#' @param cluster_run_id Optional cluster run filter.
+#' @param prefix Prefix used for semantic tables.
+#' @return Data frame with cluster sizes and distance summaries.
+#' @export
+ducksemantics_embedding_cluster_summary <- function(conn,
+                                                    cluster_run_id = NULL,
+                                                    prefix = "semantic") {
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  if (!is.null(cluster_run_id)) S7::prop(DucksemanticsScalarText(value = cluster_run_id), "value")
+  tables <- ducksemantics_tables(prefix)
+  filters <- ""
+  if (!is.null(cluster_run_id)) {
+    filters <- paste0(" WHERE cluster_run_id = ", ducksemantics_quote_string(cluster_run_id))
+  }
+  DBI::dbGetQuery(
+    conn,
+    paste0(
+      "SELECT cluster_run_id, cluster_id, COUNT(*) AS size, ",
+      "AVG(distance) AS mean_distance, MIN(distance) AS min_distance, MAX(distance) AS max_distance ",
+      "FROM ", ducksemantics_quote_ident(tables[["embedding_clusters"]]),
+      filters,
+      " GROUP BY cluster_run_id, cluster_id ",
+      " ORDER BY cluster_run_id, cluster_id"
+    )
+  )
+}
+
+#' Compare embedding clusters with graph edges
+#'
+#' This measures whether clustered node embeddings respect direct ontology
+#' relations such as `is_a` and `part_of`. It is a coarse diagnostic: high
+#' agreement does not prove semantic quality, but low agreement is actionable
+#' evidence for the embedding, text source, or clustering setup.
+#'
+#' @param conn DBI connection.
+#' @param cluster_run_id Cluster run id written by
+#'   `ducksemantics_cluster_embeddings()`.
+#' @param predicates Edge predicates to evaluate.
+#' @param prefix Prefix used for semantic tables.
+#' @return One-row data frame with edge counts and same-cluster rate.
+#' @export
+ducksemantics_embedding_cluster_graph_agreement <- function(conn,
+                                                            cluster_run_id,
+                                                            predicates = c("is_a", "part_of"),
+                                                            prefix = "semantic") {
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  S7::prop(DucksemanticsScalarText(value = cluster_run_id), "value")
+  if (!is.character(predicates) || anyNA(predicates) || any(!nzchar(predicates))) {
+    stop("`predicates` must be a character vector of non-empty strings.", call. = FALSE)
+  }
+  tables <- ducksemantics_tables(prefix)
+  predicate_sql <- paste(vapply(predicates, ducksemantics_quote_string, character(1)), collapse = ", ")
+  DBI::dbGetQuery(
+    conn,
+    paste0(
+      "WITH edge_clusters AS (",
+      "SELECT e.predicate, from_cluster.cluster_id AS from_cluster, to_cluster.cluster_id AS to_cluster ",
+      "FROM ", ducksemantics_quote_ident(tables[["edges"]]), " e ",
+      "JOIN ", ducksemantics_quote_ident(tables[["embedding_clusters"]]), " from_cluster ",
+      "ON from_cluster.cluster_run_id = ", ducksemantics_quote_string(cluster_run_id),
+      " AND from_cluster.subject_id = e.from_id ",
+      "JOIN ", ducksemantics_quote_ident(tables[["embedding_clusters"]]), " to_cluster ",
+      "ON to_cluster.cluster_run_id = ", ducksemantics_quote_string(cluster_run_id),
+      " AND to_cluster.subject_id = e.to_id ",
+      "WHERE e.predicate IN (", predicate_sql, ")",
+      ") SELECT ",
+      ducksemantics_quote_string(cluster_run_id), " AS cluster_run_id, ",
+      "COUNT(*) AS edge_count, ",
+      "SUM(CASE WHEN from_cluster = to_cluster THEN 1 ELSE 0 END) AS same_cluster_edges, ",
+      "CASE WHEN COUNT(*) > 0 THEN SUM(CASE WHEN from_cluster = to_cluster THEN 1 ELSE 0 END)::DOUBLE / COUNT(*) ELSE NULL END AS same_cluster_rate ",
+      "FROM edge_clusters"
+    )
+  )
+}
+
 #' Summarize semantic index size
 #'
 #' @param conn DBI connection.
@@ -756,7 +1239,7 @@ ducksemantics_record_judgments <- function(conn, judgments, prefix = "semantic")
 #' @return A list with table row counts and alias-index pressure metrics.
 #' @export
 ducksemantics_index_stats <- function(conn, prefix = "semantic") {
-  ducksemantics_check_connection(conn)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
   tables <- ducksemantics_tables(prefix)
   counts <- data.frame(
     table = unname(tables),
@@ -811,11 +1294,9 @@ ducksemantics_index_stats <- function(conn, prefix = "semantic") {
 #' @return A benchmark object.
 #' @export
 ducksemantics_benchmark_cases <- function(cases, gold, suite = "semantic") {
-  cases <- ducksemantics_check_data_frame(cases, "cases")
-  gold <- ducksemantics_check_data_frame(gold, "gold")
-  ducksemantics_require_columns(cases, c("case_id", "text"), "cases")
-  ducksemantics_require_columns(gold, c("case_id", "node_id"), "gold")
-  check_scalar_character(suite, "suite")
+  cases <- S7::prop(DucksemanticsTable(value = cases, required = c("case_id", "text"), allow_empty = TRUE), "value")
+  gold <- S7::prop(DucksemanticsTable(value = gold, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
+  S7::prop(DucksemanticsScalarText(value = suite), "value")
 
   cases <- cases[, c("case_id", "text", setdiff(names(cases), c("case_id", "text"))), drop = FALSE]
   gold <- ducksemantics_add_missing(gold, c(
@@ -854,14 +1335,14 @@ ducksemantics_benchmark <- function(benchmark,
                                     longest_match = TRUE,
                                     record = FALSE,
                                     collect_index_stats = TRUE) {
-  ducksemantics_check_connection(conn)
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
   if (!inherits(benchmark, "ducksemantics_benchmark")) {
     stop("`benchmark` must come from ducksemantics_benchmark_cases().", call. = FALSE)
   }
   s7contract::assert_implements(annotator, DucksemanticsAnnotator, arg = "annotator")
-  check_flag(longest_match, "longest_match")
-  check_flag(record, "record")
-  check_flag(collect_index_stats, "collect_index_stats")
+  S7::prop(DucksemanticsFlag(value = longest_match), "value")
+  S7::prop(DucksemanticsFlag(value = record), "value")
+  S7::prop(DucksemanticsFlag(value = collect_index_stats), "value")
 
   predictions <- list()
   timings <- vector("list", nrow(benchmark$cases))
@@ -923,9 +1404,8 @@ ducksemantics_benchmark <- function(benchmark,
 #' @export
 ducksemantics_benchmark_metrics <- function(predictions, gold, by = c("node", "span")) {
   by <- match.arg(by)
-  predictions <- ducksemantics_check_data_frame(predictions, "predictions")
-  gold <- ducksemantics_check_data_frame(gold, "gold")
-  ducksemantics_require_columns(gold, c("case_id", "node_id"), "gold")
+  predictions <- S7::prop(DucksemanticsTable(value = predictions, required = character(), allow_empty = TRUE), "value")
+  gold <- S7::prop(DucksemanticsTable(value = gold, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
   if (!"case_id" %in% names(predictions)) {
     if ("document_id" %in% names(predictions)) {
       predictions$case_id <- predictions$document_id
@@ -933,7 +1413,7 @@ ducksemantics_benchmark_metrics <- function(predictions, gold, by = c("node", "s
       stop("`predictions` must contain `case_id` or `document_id`.", call. = FALSE)
     }
   }
-  ducksemantics_require_columns(predictions, c("case_id", "node_id"), "predictions")
+  predictions <- S7::prop(DucksemanticsTable(value = predictions, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
 
   pred_keys <- ducksemantics_metric_keys(predictions, by = by)
   gold_keys <- ducksemantics_metric_keys(gold, by = by)
@@ -978,11 +1458,11 @@ ducksemantics_projection_sql <- function(source_table,
                                          target_table = "semantic_edges",
                                          attrs = NULL,
                                          trust = NULL) {
-  source_table <- ducksemantics_check_identifier(source_table, "source_table", qualified = TRUE)
-  target_table <- ducksemantics_check_identifier(target_table, "target_table", qualified = TRUE)
-  from <- ducksemantics_check_identifier(from, "from")
-  predicate <- ducksemantics_check_identifier(predicate, "predicate")
-  to <- ducksemantics_check_identifier(to, "to")
+  source_table <- S7::prop(DucksemanticsSqlIdentifier(value = source_table, qualified = TRUE), "value")
+  target_table <- S7::prop(DucksemanticsSqlIdentifier(value = target_table, qualified = TRUE), "value")
+  from <- S7::prop(DucksemanticsSqlIdentifier(value = from, qualified = FALSE), "value")
+  predicate <- S7::prop(DucksemanticsSqlIdentifier(value = predicate, qualified = FALSE), "value")
+  to <- S7::prop(DucksemanticsSqlIdentifier(value = to, qualified = FALSE), "value")
   attrs_sql <- ducksemantics_optional_column(attrs, "attrs")
   trust_sql <- ducksemantics_optional_column(trust, "trust")
 
@@ -1013,8 +1493,8 @@ ducksemantics_projection_sql <- function(source_table,
 ducksemantics_closure_sql <- function(transitive_predicates,
                                       source_table = "semantic_edges",
                                       target_table = "semantic_entailed_edges") {
-  source_table <- ducksemantics_check_identifier(source_table, "source_table", qualified = TRUE)
-  target_table <- ducksemantics_check_identifier(target_table, "target_table", qualified = TRUE)
+  source_table <- S7::prop(DucksemanticsSqlIdentifier(value = source_table, qualified = TRUE), "value")
+  target_table <- S7::prop(DucksemanticsSqlIdentifier(value = target_table, qualified = TRUE), "value")
   if (!is.character(transitive_predicates) || anyNA(transitive_predicates) || any(!nzchar(transitive_predicates))) {
     stop("`transitive_predicates` must be a character vector of non-empty strings.", call. = FALSE)
   }
@@ -1043,21 +1523,8 @@ ducksemantics_optional_column <- function(column, arg) {
   if (is.null(column)) {
     return("NULL")
   }
-  column <- ducksemantics_check_identifier(column, arg)
+  column <- S7::prop(DucksemanticsSqlIdentifier(value = column, qualified = FALSE), "value")
   ducksemantics_quote_ident(column)
-}
-
-ducksemantics_check_identifier <- function(x, arg, qualified = FALSE) {
-  check_scalar_character(x, arg)
-  pattern <- if (isTRUE(qualified)) {
-    "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*){0,2}$"
-  } else {
-    "^[A-Za-z_][A-Za-z0-9_]*$"
-  }
-  if (!grepl(pattern, x, perl = TRUE)) {
-    stop("`", arg, "` must be a valid SQL identifier.", call. = FALSE)
-  }
-  x
 }
 
 ducksemantics_quote_ident <- function(x) {
@@ -1071,16 +1538,8 @@ ducksemantics_quote_string <- function(x) {
   paste0("'", gsub("'", "''", x, fixed = TRUE), "'")
 }
 
-ducksemantics_check_connection <- function(conn) {
-  if (!DBI::dbIsValid(conn)) {
-    stop("`conn` must be a valid DBI connection.", call. = FALSE)
-  }
-  invisible(conn)
-}
-
 ducksemantics_prepare_nodes <- function(nodes) {
-  nodes <- ducksemantics_check_data_frame(nodes, "nodes")
-  ducksemantics_require_columns(nodes, c("node_id", "family"), "nodes")
+  nodes <- S7::prop(DucksemanticsTable(value = nodes, required = c("node_id", "family"), allow_empty = TRUE), "value")
   ducksemantics_add_missing(nodes, c(
     label = NA_character_,
     description = NA_character_,
@@ -1119,8 +1578,7 @@ ducksemantics_append_nodes <- function(conn, table, nodes) {
 }
 
 ducksemantics_prepare_aliases <- function(aliases) {
-  aliases <- ducksemantics_check_data_frame(aliases, "aliases")
-  ducksemantics_require_columns(aliases, c("node_id", "alias"), "aliases")
+  aliases <- S7::prop(DucksemanticsTable(value = aliases, required = c("node_id", "alias"), allow_empty = TRUE), "value")
   aliases <- ducksemantics_add_missing(aliases, c(
     alias_kind = "label",
     source = NA_character_,
@@ -1132,8 +1590,7 @@ ducksemantics_prepare_aliases <- function(aliases) {
 }
 
 ducksemantics_prepare_edges <- function(edges) {
-  edges <- ducksemantics_check_data_frame(edges, "edges")
-  ducksemantics_require_columns(edges, c("from_id", "predicate", "to_id"), "edges")
+  edges <- S7::prop(DucksemanticsTable(value = edges, required = c("from_id", "predicate", "to_id"), allow_empty = TRUE), "value")
   ducksemantics_add_missing(edges, c(
     attrs = NA_character_,
     trust = NA_character_
@@ -1141,8 +1598,7 @@ ducksemantics_prepare_edges <- function(edges) {
 }
 
 ducksemantics_prepare_judgments <- function(judgments) {
-  judgments <- ducksemantics_check_data_frame(judgments, "judgments")
-  ducksemantics_require_columns(judgments, c("judgment_id", "subject_id", "predicate", "decision"), "judgments")
+  judgments <- S7::prop(DucksemanticsTable(value = judgments, required = c("judgment_id", "subject_id", "predicate", "decision"), allow_empty = TRUE), "value")
   judgments <- ducksemantics_add_missing(judgments, c(
     object_id = NA_character_,
     value_json = NA_character_,
@@ -1158,19 +1614,188 @@ ducksemantics_prepare_judgments <- function(judgments) {
   )]
 }
 
-ducksemantics_check_data_frame <- function(x, arg) {
-  if (!is.data.frame(x)) {
-    stop("`", arg, "` must be a data frame.", call. = FALSE)
+ducksemantics_embedding_rows <- function(batch) {
+  embeddings <- S7::prop(batch, "embeddings")
+  subject_id <- S7::prop(batch, "subject_id")
+  subject_kind <- S7::prop(batch, "subject_kind")
+  provider <- S7::prop(batch, "provider")
+  text <- S7::prop(batch, "text")
+  attrs <- S7::prop(batch, "attrs")
+  if (is.null(text)) text <- NA_character_
+  if (is.null(attrs)) attrs <- NA_character_
+  text <- rep(text, length.out = nrow(embeddings))
+  attrs <- rep(attrs, length.out = nrow(embeddings))
+  rows <- data.frame(
+    subject_id = subject_id,
+    subject_kind = rep(subject_kind, nrow(embeddings)),
+    provider = rep(provider, nrow(embeddings)),
+    text = text,
+    dim = rep(ncol(embeddings), nrow(embeddings)),
+    attrs = attrs,
+    stringsAsFactors = FALSE
+  )
+  rows$embedding <- I(lapply(seq_len(nrow(embeddings)), function(i) as.single(embeddings[i, ])))
+  rows[, c("subject_id", "subject_kind", "provider", "text", "dim", "embedding", "attrs")]
+}
+
+ducksemantics_token_embedding_rows <- function(batch) {
+  embeddings <- S7::prop(batch, "embeddings")
+  subject_id <- S7::prop(batch, "subject_id")
+  subject_kind <- S7::prop(batch, "subject_kind")
+  provider <- S7::prop(batch, "provider")
+  token_index <- as.integer(S7::prop(batch, "token_index"))
+  block_id <- S7::prop(batch, "block_id")
+  token <- S7::prop(batch, "token")
+  start_offset <- S7::prop(batch, "start_offset")
+  end_offset <- S7::prop(batch, "end_offset")
+  storage <- S7::prop(batch, "storage")
+  storage_ref <- S7::prop(batch, "storage_ref")
+  attrs <- S7::prop(batch, "attrs")
+  n <- nrow(embeddings)
+  if (is.null(token)) token <- NA_character_
+  if (is.null(start_offset)) start_offset <- NA_integer_
+  if (is.null(end_offset)) end_offset <- NA_integer_
+  if (is.null(storage_ref)) storage_ref <- NA_character_
+  if (is.null(attrs)) attrs <- NA_character_
+  rows <- data.frame(
+    block_id = block_id,
+    subject_id = subject_id,
+    subject_kind = rep(subject_kind, n),
+    provider = rep(provider, n),
+    token_index = token_index,
+    token = rep(token, length.out = n),
+    start_offset = rep(as.integer(start_offset), length.out = n),
+    end_offset = rep(as.integer(end_offset), length.out = n),
+    dim = rep(ncol(embeddings), n),
+    storage = rep(storage, n),
+    storage_ref = rep(storage_ref, length.out = n),
+    attrs = rep(attrs, length.out = n),
+    stringsAsFactors = FALSE
+  )
+  rows$embedding <- I(lapply(seq_len(n), function(i) as.single(embeddings[i, ])))
+  rows[, c(
+    "block_id", "subject_id", "subject_kind", "provider", "token_index",
+    "token", "start_offset", "end_offset", "dim", "embedding", "storage",
+    "storage_ref", "attrs"
+  )]
+}
+
+ducksemantics_embedding_table_rows <- function(conn, spec, prefix = "semantic") {
+  tables <- ducksemantics_tables(prefix)
+  table <- S7::prop(spec, "table") %||% tables[["embeddings"]]
+  table <- S7::prop(DucksemanticsSqlIdentifier(value = table, qualified = TRUE), "value")
+  filters <- c("embedding IS NOT NULL")
+  dimensions <- S7::prop(spec, "dimensions")
+  if (!is.null(dimensions)) {
+    filters <- c(filters, paste0("dim = ", as.integer(dimensions)))
+  }
+  provider <- S7::prop(spec, "provider")
+  if (!is.null(provider)) {
+    filters <- c(filters, paste0("provider = ", ducksemantics_quote_string(provider)))
+  }
+  subject_kind <- S7::prop(spec, "subject_kind")
+  if (!is.null(subject_kind)) {
+    filters <- c(filters, paste0("subject_kind = ", ducksemantics_quote_string(subject_kind)))
+  }
+  DBI::dbGetQuery(
+    conn,
+    paste0(
+      "SELECT subject_id, subject_kind, provider, text, dim, embedding, attrs ",
+      "FROM ", ducksemantics_quote_ident(table),
+      " WHERE ", paste(filters, collapse = " AND "),
+      " ORDER BY provider, subject_kind, subject_id"
+    )
+  )
+}
+
+ducksemantics_embedding_column_matrix <- function(embedding,
+                                                  dimensions,
+                                                  storage = "r",
+                                                  rfmalloc_runtime = NULL) {
+  if (is.matrix(embedding) && ncol(embedding) == dimensions) {
+    if (identical(storage, "rfmalloc")) {
+      x <- ducksemantics_allocate_matrix(nrow(embedding), dimensions, storage, rfmalloc_runtime)
+      x[,] <- embedding
+    } else {
+      x <- embedding
+    }
+  } else {
+    rows <- if (is.list(embedding)) {
+      lapply(embedding, function(value) as.numeric(unlist(value, use.names = FALSE)))
+    } else {
+      lapply(seq_along(embedding), function(i) as.numeric(embedding[[i]]))
+    }
+    bad <- which(vapply(rows, length, integer(1)) != dimensions)
+    if (length(bad)) {
+      stop("Embedding row ", bad[[1L]], " does not match dimension ", dimensions, ".", call. = FALSE)
+    }
+    x <- ducksemantics_allocate_matrix(length(rows), dimensions, storage, rfmalloc_runtime)
+    for (i in seq_along(rows)) {
+      x[i, ] <- rows[[i]]
+    }
+  }
+  if (identical(storage, "r")) {
+    storage.mode(x) <- "double"
+  }
+  if (anyNA(x) || any(!is.finite(x))) {
+    stop("Embedding rows must contain only finite non-missing values.", call. = FALSE)
   }
   x
 }
 
-ducksemantics_require_columns <- function(x, columns, arg) {
-  missing <- setdiff(columns, names(x))
-  if (length(missing)) {
-    stop("`", arg, "` is missing required column(s): ", paste(missing, collapse = ", "), call. = FALSE)
+ducksemantics_allocate_matrix <- function(nrow, ncol, storage, rfmalloc_runtime = NULL) {
+  if (identical(storage, "r")) {
+    return(matrix(0, nrow = nrow, ncol = ncol))
   }
-  invisible(x)
+  if (!requireNamespace("Rfmalloc", quietly = TRUE)) {
+    stop("Rfmalloc is required when clustering storage is `rfmalloc`.", call. = FALSE)
+  }
+  if (is.null(rfmalloc_runtime)) {
+    Rfmalloc::create_fmalloc_matrix("numeric", nrow = nrow, ncol = ncol)
+  } else {
+    Rfmalloc::create_fmalloc_matrix("numeric", nrow = nrow, ncol = ncol, runtime = rfmalloc_runtime)
+  }
+}
+
+ducksemantics_cluster_assignment_rows <- function(rows, x, fit, run_id) {
+  centers <- fit$centers[fit$cluster, , drop = FALSE]
+  distance <- sqrt(rowSums((x - centers) ^ 2))
+  data.frame(
+    cluster_run_id = run_id,
+    subject_id = rows$subject_id,
+    subject_kind = rows$subject_kind,
+    provider = rows$provider,
+    dim = as.integer(rows$dim),
+    cluster_id = as.integer(fit$cluster),
+    distance = as.numeric(distance),
+    text = rows$text,
+    attrs = rows$attrs,
+    stringsAsFactors = FALSE
+  )
+}
+
+ducksemantics_cluster_centroid_rows <- function(rows, fit, run_id, dimensions) {
+  provider <- unique(rows$provider)
+  subject_kind <- unique(rows$subject_kind)
+  if (length(provider) != 1L) provider <- "<mixed>"
+  if (length(subject_kind) != 1L) subject_kind <- "<mixed>"
+  out <- data.frame(
+    cluster_run_id = rep(run_id, nrow(fit$centers)),
+    provider = rep(provider, nrow(fit$centers)),
+    subject_kind = rep(subject_kind, nrow(fit$centers)),
+    dim = rep(as.integer(dimensions), nrow(fit$centers)),
+    cluster_id = seq_len(nrow(fit$centers)),
+    size = as.integer(fit$size),
+    attrs = NA_character_,
+    stringsAsFactors = FALSE
+  )
+  out$embedding <- I(lapply(seq_len(nrow(fit$centers)), function(i) as.single(fit$centers[i, ])))
+  out[, c("cluster_run_id", "provider", "subject_kind", "dim", "cluster_id", "size", "embedding", "attrs")]
+}
+
+ducksemantics_float_array_literal <- function(x) {
+  values <- paste(sprintf("%.9g::FLOAT", as.numeric(x)), collapse = ",")
+  paste0("[", values, "]::FLOAT[", length(x), "]")
 }
 
 ducksemantics_add_missing <- function(x, defaults) {
@@ -1378,7 +2003,7 @@ ducksemantics_longest_matches <- function(x) {
 }
 
 ducksemantics_mentions_payload <- function(mentions) {
-  mentions <- ducksemantics_check_data_frame(mentions, "mentions")
+  mentions <- S7::prop(DucksemanticsTable(value = mentions, required = character(), allow_empty = TRUE), "value")
   keep <- intersect(
     c("mention_id", "node_id", "span", "start_offset", "end_offset", "score", "alias", "alias_kind", "source"),
     names(mentions)
@@ -1412,7 +2037,7 @@ ducksemantics_response_text <- function(x) {
 }
 
 ducksemantics_parse_json_response <- function(response) {
-  check_scalar_character(response, "response")
+  S7::prop(DucksemanticsScalarText(value = response), "value")
   ducksemantics_require_jsonlite()
   json <- ducksemantics_extract_json(response)
   jsonlite::fromJSON(json, simplifyDataFrame = TRUE)
@@ -1463,8 +2088,7 @@ ducksemantics_judgments_from_model <- function(parsed, mentions, model = "Rbebel
   if (is.list(parsed) && !is.data.frame(parsed)) {
     parsed <- as.data.frame(parsed, stringsAsFactors = FALSE)
   }
-  parsed <- ducksemantics_check_data_frame(parsed, "parsed")
-  ducksemantics_require_columns(parsed, c("mention_id", "decision"), "parsed")
+  parsed <- S7::prop(DucksemanticsTable(value = parsed, required = c("mention_id", "decision"), allow_empty = TRUE), "value")
   allowed_decisions <- c("keep", "drop", "replace", "enrich")
   bad_decisions <- setdiff(unique(as.character(parsed$decision)), allowed_decisions)
   if (length(bad_decisions)) {
