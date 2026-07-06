@@ -34,7 +34,7 @@ ducksemantics_projection_sql(
 
 - attrs, trust:
 
-  Optional source columns containing JSON.
+  Optional source columns containing JSON text.
 
 ## Value
 
