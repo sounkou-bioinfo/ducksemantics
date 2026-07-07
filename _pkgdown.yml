@@ -54,6 +54,7 @@ reference:
       - ducksemantics_run
       - ducksemantics_parse
       - ducksemantics_embed
+      - ducksemantics_embed_cached
       - ducksemantics_lexical_annotator
       - ducksemantics_prompt_runner
       - ducksemantics_embedding_provider
