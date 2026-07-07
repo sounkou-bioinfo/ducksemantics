@@ -54,6 +54,29 @@ embedding_provider <- ducksemantics_embedding_provider(function(text) {
 expect_true(s7contract::implements(embedding_provider, DucksemanticsEmbeddingProvider))
 expect_equal(dim(ducksemantics_embed(embedding_provider, c("alpha", "beta"))), c(2L, 1L))
 
+chunk_cache_dir <- tempfile()
+chunk_calls <- 0L
+chunk_provider <- ducksemantics_embedding_provider(function(text) {
+  chunk_calls <<- chunk_calls + 1L
+  matrix(nchar(text), nrow = length(text), ncol = 1L)
+})
+chunked_embeddings <- ducksemantics_embed_cached(
+  c("a", "bb", "ccc", "dddd", "eeeee"),
+  provider = chunk_provider,
+  cache_dir = chunk_cache_dir,
+  chunk_size = 2L
+)
+chunked_again <- ducksemantics_embed_cached(
+  c("a", "bb", "ccc", "dddd", "eeeee"),
+  provider = chunk_provider,
+  cache_dir = chunk_cache_dir,
+  chunk_size = 2L
+)
+expect_equal(as.vector(chunked_embeddings), c(1, 2, 3, 4, 5))
+expect_equal(chunked_embeddings, chunked_again)
+expect_equal(chunk_calls, 3L)
+expect_true(file.exists(file.path(chunk_cache_dir, "manifest.rds")))
+
 cache_path <- tempfile(fileext = ".rds")
 cache_calls <- 0L
 cached_value <- ducksemantics_cache_rds(cache_path, function() {

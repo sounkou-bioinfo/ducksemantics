@@ -169,7 +169,20 @@ ducksemantics_bebel_embedding_provider_class <- S7::new_class(
     model = S7::class_any,
     add_bos = S7::class_logical,
     normalize = S7::class_logical,
-    pooling = S7::class_character
+    pooling = S7::class_character,
+    token_batch_size = ducksemantics_positive_integer_property,
+    sequence_batch_size = ducksemantics_positive_integer_property,
+    check_interrupt = ducksemantics_flag_property
+  )
+)
+
+ducksemantics_embedding_cache_spec_class <- S7::new_class(
+  "ducksemantics_embedding_cache_spec",
+  package = "ducksemantics",
+  properties = list(
+    cache_dir = ducksemantics_text_property,
+    chunk_size = ducksemantics_positive_integer_property,
+    refresh = ducksemantics_flag_property
   )
 )
 
@@ -222,12 +235,20 @@ ducksemantics_embedding_provider <- function(fun, label = "function") {
 #' @param add_bos Include BOS in tokenization?
 #' @param normalize L2-normalize embeddings?
 #' @param pooling Hidden-state pooling strategy: `mean` or `last`.
+#' @param token_batch_size Number of tokens per Rust batched prefill/matmul call.
+#' @param sequence_batch_size Number of texts per independent-sequence embedding
+#'   batch.
+#' @param check_interrupt Whether long embedding runs should poll R interrupts
+#'   between texts and token batches.
 #' @return An object implementing [DucksemanticsEmbeddingProvider].
 #' @export
 ducksemantics_bebel_embedding_provider <- function(model,
                                                    add_bos = TRUE,
                                                    normalize = TRUE,
-                                                   pooling = c("mean", "last")) {
+                                                   pooling = c("mean", "last"),
+                                                   token_batch_size = 512L,
+                                                   sequence_batch_size = 64L,
+                                                   check_interrupt = TRUE) {
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
     stop("Rbebelm is required for the BebeLM embedding provider.", call. = FALSE)
   }
@@ -238,7 +259,10 @@ ducksemantics_bebel_embedding_provider <- function(model,
     model = model,
     add_bos = add_bos,
     normalize = normalize,
-    pooling = pooling
+    pooling = pooling,
+    token_batch_size = token_batch_size,
+    sequence_batch_size = sequence_batch_size,
+    check_interrupt = check_interrupt
   )
 }
 
@@ -303,9 +327,94 @@ S7::method(ducksemantics_embed, ducksemantics_bebel_embedding_provider_class) <-
     text,
     add_bos = provider@add_bos,
     normalize = provider@normalize,
-    pooling = provider@pooling
+    pooling = provider@pooling,
+    token_batch_size = provider@token_batch_size,
+    sequence_batch_size = provider@sequence_batch_size,
+    check_interrupt = provider@check_interrupt
   )
   S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
+}
+
+#' Cache provider embeddings in durable chunks
+#'
+#' This is the embedding cache used for large ontology passes. Each chunk is
+#' written after it finishes, so interrupted runs can resume without discarding
+#' completed BebeLM work.
+#'
+#' @param text Character vector to embed.
+#' @param provider Object implementing [DucksemanticsEmbeddingProvider].
+#' @param cache_dir Directory for chunk RDS files.
+#' @param chunk_size Number of texts per persisted chunk.
+#' @param refresh Recompute all chunks?
+#' @param ... Extra arguments passed to [ducksemantics_embed()].
+#' @return Numeric embedding matrix with one row per input text.
+#' @export
+ducksemantics_embed_cached <- function(text,
+                                       provider,
+                                       cache_dir,
+                                       chunk_size = 4096L,
+                                       refresh = FALSE,
+                                       ...) {
+  if (!is.character(text) || anyNA(text)) {
+    stop("`text` must be a character vector without NA.", call. = FALSE)
+  }
+  if (!length(text)) {
+    stop("`text` must contain at least one value.", call. = FALSE)
+  }
+  spec <- ducksemantics_embedding_cache_spec_class(
+    cache_dir = cache_dir,
+    chunk_size = chunk_size,
+    refresh = refresh
+  )
+  cache_dir <- spec@cache_dir
+  chunk_size <- as.integer(spec@chunk_size)
+  refresh <- spec@refresh
+
+  if (isTRUE(refresh) && dir.exists(cache_dir)) {
+    unlink(cache_dir, recursive = TRUE, force = TRUE)
+  }
+  if (!dir.exists(cache_dir)) {
+    dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  manifest_path <- file.path(cache_dir, "manifest.rds")
+  manifest <- if (file.exists(manifest_path)) readRDS(manifest_path) else NULL
+  if (!is.null(manifest) &&
+    (!identical(manifest$n, length(text)) || !identical(manifest$chunk_size, chunk_size))) {
+    unlink(list.files(cache_dir, pattern = "^chunk-[0-9]+[.]rds$", full.names = TRUE), force = TRUE)
+    manifest <- NULL
+  }
+
+  starts <- seq.int(1L, length(text), by = chunk_size)
+  paths <- file.path(cache_dir, sprintf("chunk-%05d.rds", seq_along(starts)))
+  chunks <- vector("list", length(starts))
+  for (i in seq_along(starts)) {
+    idx <- starts[[i]]:min(length(text), starts[[i]] + chunk_size - 1L)
+    path <- paths[[i]]
+    chunk <- if (file.exists(path)) {
+      readRDS(path)
+    } else {
+      out <- ducksemantics_embed(provider, text[idx], ...)
+      saveRDS(out, path)
+      out
+    }
+    chunks[[i]] <- S7::prop(
+      DucksemanticsEmbeddingMatrix(embeddings = chunk, rows = length(idx)),
+      "embeddings"
+    )
+  }
+
+  out <- do.call(rbind, chunks)
+  saveRDS(
+    list(
+      n = length(text),
+      chunk_size = chunk_size,
+      chunks = basename(paths),
+      dimensions = dim(out)
+    ),
+    manifest_path
+  )
+  out
 }
 
 S7::method(ducksemantics_parse, ducksemantics_json_judgment_parser_class) <- function(parser, response, ...) {

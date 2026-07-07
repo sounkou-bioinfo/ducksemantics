@@ -20,9 +20,11 @@ on-device provider for CPU embedding and judgment; other providers implement
 the same S7 generics.
 
 ```{r}
-library(ducksemantics)
-library(Rbebelm)
-library(Rfmalloc)
+suppressPackageStartupMessages({
+  library(ducksemantics)
+  library(Rbebelm)
+  library(Rfmalloc)
+})
 
 cache_dir <- tools::R_user_dir("ducksemantics", "cache")
 
@@ -104,13 +106,22 @@ mentions <- ducksemantics_annotate(conn, note, document_id = "readme-case-001")
 unique(mentions[, c("span", "node_id", "alias_kind", "source")])
 ```
 
-The BebeLM bridge is typed as an embedding provider. The vectors below come from
-the local GGUF model and are cached as RDS because they are deterministic for the
+The BebeLM bridge is typed as an embedding provider. The model load controls the
+Rust thread pool; the provider controls token batching for long texts and
+sequence batching across independent texts. The vectors below come from the
+local GGUF model and are cached as RDS because they are deterministic for the
 same model and pooling configuration.
 
 ```{r}
-model <- bebel_model_load(weights_file, num_threads = 2)
-embedding_provider <- ducksemantics_bebel_embedding_provider(model, pooling = "mean")
+bebel_threads <- as.integer(Sys.getenv("BEBELM_NUM_THREADS", "16"))
+model <- bebel_model_load(weights_file, num_threads = bebel_threads)
+embedding_provider <- ducksemantics_bebel_embedding_provider(
+  model,
+  pooling = "mean",
+  token_batch_size = 512L,
+  sequence_batch_size = 1024L,
+  check_interrupt = TRUE
+)
 
 embedding_terms <- c(
   "global developmental delay",
@@ -177,8 +188,8 @@ ducksemantics_embedding_query(
 
 The first semantic measurement is ontology clustering: embed every HPO and MONDO
 label, store the vectors in DuckDB, cluster them, and compare cluster
-assignments against direct graph edges. The embeddings are cached because this
-is a real BebeLM pass over the ontology labels.
+assignments against direct graph edges. The embeddings are cached in chunks
+because this is a real BebeLM pass over the ontology labels.
 
 ```{r}
 ontology_label_terms <- DBI::dbGetQuery(
@@ -192,10 +203,12 @@ ontology_label_terms <- DBI::dbGetQuery(
 )
 
 ontology_embedding_label <- "Rbebelm ontology label mean"
-ontology_label_embeddings <- ducksemantics_cache_rds(
-  file.path(cache_dir, "readme-bebel-ontology-label-embeddings.rds"),
-  function() ducksemantics_embed(embedding_provider, ontology_label_terms$label)
-)
+ontology_label_embeddings <- ontology_label_terms$label |>
+  ducksemantics_embed_cached(
+    provider = embedding_provider,
+    cache_dir = file.path(cache_dir, "readme-bebel-ontology-label-embeddings"),
+    chunk_size = 1024L
+  )
 
 ducksemantics_embedding_batch(
   embeddings = ontology_label_embeddings,
@@ -206,10 +219,12 @@ ducksemantics_embedding_batch(
 ) |>
   ducksemantics_write_embeddings(conn, replace = TRUE)
 
+rfmalloc_path <- file.path(cache_dir, "readme-ontology-clusters.fmalloc")
+unlink(rfmalloc_path, force = TRUE)
 rfmalloc_runtime <- Rfmalloc::open_fmalloc(
-  file.path(cache_dir, "readme-ontology-clusters.fmalloc"),
+  rfmalloc_path,
   mode = "scratch",
-  size_gb = 2
+  size_gb = 8
 )
 
 ontology_clusters <- ducksemantics_embedding_cluster_spec(
@@ -218,7 +233,8 @@ ontology_clusters <- ducksemantics_embedding_cluster_spec(
   subject_kind = "node",
   dimensions = ncol(ontology_label_embeddings),
   run_id = "readme-ontology-label-clusters",
-  nstart = 2,
+  nstart = 1,
+  max_iter = 30,
   storage = "rfmalloc"
 ) |>
   ducksemantics_cluster_embeddings(conn, rfmalloc_runtime = rfmalloc_runtime)

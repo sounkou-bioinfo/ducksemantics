@@ -13,8 +13,11 @@ BebeLM/Rbebelm is the bundled on-device provider for CPU embedding and
 judgment; other providers implement the same S7 generics.
 
 ``` r
-library(ducksemantics)
-library(Rbebelm)
+suppressPackageStartupMessages({
+  library(ducksemantics)
+  library(Rbebelm)
+  library(Rfmalloc)
+})
 
 cache_dir <- tools::R_user_dir("ducksemantics", "cache")
 
@@ -83,14 +86,18 @@ ducksemantics_write_graph(
 )
 
 ducksemantics_index_stats(conn)$tables
-#>                     table row_count
-#> 1          semantic_nodes     71333
-#> 2        semantic_aliases    195344
-#> 3    semantic_alias_index    195344
-#> 4          semantic_edges    140110
-#> 5 semantic_entailed_edges         0
-#> 6       semantic_mentions         0
-#> 7      semantic_judgments         0
+#>                           table row_count
+#> 1                semantic_nodes     71333
+#> 2              semantic_aliases    195344
+#> 3          semantic_alias_index    195344
+#> 4                semantic_edges    140110
+#> 5       semantic_entailed_edges         0
+#> 6             semantic_mentions         0
+#> 7            semantic_judgments         0
+#> 8           semantic_embeddings         0
+#> 9     semantic_token_embeddings         0
+#> 10  semantic_embedding_clusters         0
+#> 11 semantic_embedding_centroids         0
 ```
 
 Grounding returns deterministic candidates with source provenance. The
@@ -122,13 +129,22 @@ unique(mentions[, c("span", "node_id", "alias_kind", "source")])
 #> 13          diabetes mellitus MONDO:0005015 synonym:exact mondo.obo
 ```
 
-The BebeLM bridge is typed as an embedding provider. The vectors below
-come from the local GGUF model and are cached as RDS because they are
-deterministic for the same model and pooling configuration.
+The BebeLM bridge is typed as an embedding provider. The model load
+controls the Rust thread pool; the provider controls token batching for
+long texts and sequence batching across independent texts. The vectors
+below come from the local GGUF model and are cached as RDS because they
+are deterministic for the same model and pooling configuration.
 
 ``` r
-model <- bebel_model_load(weights_file, num_threads = 2)
-embedding_provider <- ducksemantics_bebel_embedding_provider(model, pooling = "mean")
+bebel_threads <- as.integer(Sys.getenv("BEBELM_NUM_THREADS", "16"))
+model <- bebel_model_load(weights_file, num_threads = bebel_threads)
+embedding_provider <- ducksemantics_bebel_embedding_provider(
+  model,
+  pooling = "mean",
+  token_batch_size = 512L,
+  sequence_batch_size = 1024L,
+  check_interrupt = TRUE
+)
 
 embedding_terms <- c(
   "global developmental delay",
@@ -152,9 +168,139 @@ data.frame(
 #> 1     5       2048            1
 ```
 
-BebeLM judgment uses the same provider interface. The parser here accepts
-BebeLM tool calls and JSON judgment payloads, then returns the rows
-expected by the semantic store.
+BebeLM embeddings are written back to DuckDB, then searched with DuckDB
+vector functions. HNSW can be added by the same index spec; the README
+materializes the fixed-dimension table without building the
+extension-backed index so the example stays focused on the package API.
+
+``` r
+embedding_label <- "Rbebelm mean"
+
+ducksemantics_embedding_batch(
+  embeddings = embeddings,
+  subject_id = embedding_terms,
+  subject_kind = "readme_term",
+  provider = embedding_label,
+  text = embedding_terms
+) |>
+  ducksemantics_write_embeddings(conn, replace = TRUE)
+
+ducksemantics_embedding_query(
+  embeddings[match("short stature", embedding_terms), , drop = FALSE],
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  top_k = 3
+) |>
+  ducksemantics_embedding_search(conn)
+#>                   subject_id subject_kind     provider                       text  dim
+#> 1              short stature  readme_term Rbebelm mean              short stature 2048
+#> 2          diabetes mellitus  readme_term Rbebelm mean          diabetes mellitus 2048
+#> 3 global developmental delay  readme_term Rbebelm mean global developmental delay 2048
+#>       score
+#> 1 1.0000000
+#> 2 0.9597000
+#> 3 0.9579571
+
+embedding_index <- ducksemantics_embedding_index_spec(
+  dimensions = ncol(embeddings),
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  hnsw = FALSE
+) |>
+  ducksemantics_materialize_embedding_index(conn)
+
+ducksemantics_embedding_query(
+  embeddings[match("cardiomyopathy", embedding_terms), , drop = FALSE],
+  table = embedding_index,
+  provider = embedding_label,
+  subject_kind = "readme_term",
+  top_k = 3
+) |>
+  ducksemantics_embedding_search(conn)
+#>          subject_id subject_kind     provider              text  dim     score
+#> 1    cardiomyopathy  readme_term Rbebelm mean    cardiomyopathy 2048 1.0000000
+#> 2 diabetes mellitus  readme_term Rbebelm mean diabetes mellitus 2048 0.9355308
+#> 3          seizures  readme_term Rbebelm mean          seizures 2048 0.9351248
+```
+
+The first semantic measurement is ontology clustering: embed every HPO
+and MONDO label, store the vectors in DuckDB, cluster them, and compare
+cluster assignments against direct graph edges. The embeddings are
+cached in chunks because this is a real BebeLM pass over the ontology
+labels.
+
+``` r
+ontology_label_terms <- DBI::dbGetQuery(
+  conn,
+  paste(
+    "SELECT node_id, family, label",
+    "FROM semantic_nodes",
+    "WHERE label IS NOT NULL",
+    "ORDER BY family, node_id"
+  )
+)
+
+ontology_embedding_label <- "Rbebelm ontology label mean"
+ontology_label_embeddings <- ontology_label_terms$label |>
+  ducksemantics_embed_cached(
+    provider = embedding_provider,
+    cache_dir = file.path(cache_dir, "readme-bebel-ontology-label-embeddings"),
+    chunk_size = 1024L
+  )
+
+ducksemantics_embedding_batch(
+  embeddings = ontology_label_embeddings,
+  subject_id = ontology_label_terms$node_id,
+  subject_kind = "node",
+  provider = ontology_embedding_label,
+  text = ontology_label_terms$label
+) |>
+  ducksemantics_write_embeddings(conn, replace = TRUE)
+
+rfmalloc_path <- file.path(cache_dir, "readme-ontology-clusters.fmalloc")
+unlink(rfmalloc_path, force = TRUE)
+rfmalloc_runtime <- Rfmalloc::open_fmalloc(
+  rfmalloc_path,
+  mode = "scratch",
+  size_gb = 8
+)
+
+ontology_clusters <- ducksemantics_embedding_cluster_spec(
+  k = 32,
+  provider = ontology_embedding_label,
+  subject_kind = "node",
+  dimensions = ncol(ontology_label_embeddings),
+  run_id = "readme-ontology-label-clusters",
+  nstart = 1,
+  max_iter = 30,
+  storage = "rfmalloc"
+) |>
+  ducksemantics_cluster_embeddings(conn, rfmalloc_runtime = rfmalloc_runtime)
+
+Rfmalloc::cleanup_fmalloc(rfmalloc_runtime)
+
+head(ontology_clusters$summary[order(-ontology_clusters$summary$size), ], 8)
+#>                    cluster_run_id cluster_id size  withinss mean_distance
+#> 10 readme-ontology-label-clusters         10 5176 240.93494     0.2132693
+#> 4  readme-ontology-label-clusters          4 4568 158.62406     0.1835612
+#> 9  readme-ontology-label-clusters          9 4028 243.59611     0.2439811
+#> 18 readme-ontology-label-clusters         18 3535 232.95918     0.2552565
+#> 29 readme-ontology-label-clusters         29 3523 230.87402     0.2542924
+#> 15 readme-ontology-label-clusters         15 3447 185.65704     0.2303807
+#> 21 readme-ontology-label-clusters         21 3386 169.69024     0.2208094
+#> 25 readme-ontology-label-clusters         25 2999  85.37741     0.1647605
+ducksemantics_embedding_cluster_graph_agreement(
+  conn,
+  ontology_clusters$cluster_run_id,
+  predicates = c("is_a", "part_of")
+)
+#>                   cluster_run_id edge_count same_cluster_edges same_cluster_rate
+#> 1 readme-ontology-label-clusters      68994              24055         0.3486535
+```
+
+BebeLM judgment uses the same provider interface. The parser here
+accepts BebeLM tool calls and JSON judgment payloads, then returns the
+rows expected by the semantic store.
 
 ``` r
 judgment_mentions <- data.frame(
@@ -223,7 +369,7 @@ run$metrics
 #> 1 node  4  3  0 0.5714286      1 0.7272727
 run$timings[, c("case_id", "seconds", "token_count", "prediction_count", "prediction_bytes")]
 #>           case_id seconds token_count prediction_count prediction_bytes
-#> 1 readme-case-001   0.086          15               13             6152
+#> 1 readme-case-001   0.082          15               13             6152
 ```
 
 ``` r

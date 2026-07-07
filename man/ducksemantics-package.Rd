@@ -14,6 +14,7 @@ model judgment prompts over deterministic candidates.
 Useful links:
 \itemize{
   \item \url{https://github.com/sounkou-bioinfo/ducksemantics}
+  \item \url{https://sounkou-bioinfo.github.io/ducksemantics}
   \item Report bugs at \url{https://github.com/sounkou-bioinfo/ducksemantics/issues}
 }
 
