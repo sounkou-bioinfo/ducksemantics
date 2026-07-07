@@ -10,6 +10,8 @@ Useful links:
 
 - <https://github.com/sounkou-bioinfo/ducksemantics>
 
+- <https://sounkou-bioinfo.github.io/ducksemantics>
+
 - Report bugs at
   <https://github.com/sounkou-bioinfo/ducksemantics/issues>
 

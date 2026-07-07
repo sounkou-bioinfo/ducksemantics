@@ -94,6 +94,8 @@
   [`ducksemantics_parse()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   [`ducksemantics_ground()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   : Provider interface generics
+- [`ducksemantics_embed_cached()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embed_cached.md)
+  : Cache provider embeddings in durable chunks
 - [`ducksemantics_lexical_annotator()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_lexical_annotator.md)
   : Create the default DuckDB lexical annotator
 - [`ducksemantics_prompt_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_prompt_runner.md)
