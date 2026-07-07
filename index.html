@@ -234,8 +234,44 @@
 <span><span class="co">#&gt; 1    cardiomyopathy  readme_term Rbebelm mean    cardiomyopathy 2048 1.0000000</span></span>
 <span><span class="co">#&gt; 2 diabetes mellitus  readme_term Rbebelm mean diabetes mellitus 2048 0.9355308</span></span>
 <span><span class="co">#&gt; 3          seizures  readme_term Rbebelm mean          seizures 2048 0.9351248</span></span></code></pre></div>
-<p>The first semantic measurement is ontology clustering: embed every HPO and MONDO label, store the vectors in DuckDB, cluster them, and compare cluster assignments against direct graph edges. The embeddings are cached in chunks because this is a real BebeLM pass over the ontology labels.</p>
+<p>Late interaction uses token-level hidden states. The first implementation is an exact MaxSim reranker over stored token blocks, intended for candidate sets from aliases, FTS, graph neighborhoods, or pooled-vector search.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">token_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_token_embedding_provider.html">ducksemantics_bebel_token_embedding_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">model</span>,</span>
+<span>  label <span class="op">=</span> <span class="st">"Rbebelm token"</span>,</span>
+<span>  token_batch_size <span class="op">=</span> <span class="fl">512L</span>,</span>
+<span>  check_interrupt <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">token_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-token-embeddings.rds"</span><span class="op">)</span>,</span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
+<span>      <span class="va">embedding_terms</span>,</span>
+<span>      provider <span class="op">=</span> <span class="va">token_provider</span>,</span>
+<span>      subject_id <span class="op">=</span> <span class="va">embedding_terms</span>,</span>
+<span>      subject_kind <span class="op">=</span> <span class="st">"readme_term"</span></span>
+<span>    <span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">token_batch</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">query_tokens</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_provider_generics.html">ducksemantics_token_embed</a></span><span class="op">(</span><span class="va">token_provider</span>, <span class="st">"short height"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span></span>
+<span></span>
+<span><span class="fu"><a href="reference/ducksemantics_token_embedding_query.html">ducksemantics_token_embedding_query</a></span><span class="op">(</span></span>
+<span>  <span class="va">query_tokens</span><span class="op">$</span><span class="va">embeddings</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"Rbebelm token"</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">3</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
+<span><span class="co">#&gt; &lt;ducksemantics late-interaction result&gt;</span></span>
+<span><span class="co">#&gt;   blocks: 3</span></span>
+<span><span class="co">#&gt;   top score: 0.9079</span></span></code></pre></div>
+<p>The first semantic measurement is ontology clustering: embed every HPO and MONDO label, store the vectors in DuckDB, cluster them, and compare cluster assignments against direct graph edges. The embeddings are cached in chunks because this is a real BebeLM pass over the ontology labels.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ontology_label_terms</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span></span>
 <span>  <span class="va">conn</span>,</span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
@@ -303,7 +339,7 @@
 <span><span class="co">#&gt;                   cluster_run_id edge_count same_cluster_edges same_cluster_rate</span></span>
 <span><span class="co">#&gt; 1 readme-ontology-label-clusters      68994              24055         0.3486535</span></span></code></pre></div>
 <p>BebeLM judgment uses the same provider interface. The parser here accepts BebeLM tool calls and JSON judgment payloads, then returns the rows expected by the semantic store.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">judgment_mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>  mention_id <span class="op">=</span> <span class="st">"readme-judgment:000001"</span>,</span>
 <span>  node_id <span class="op">=</span> <span class="st">"HP:0004322"</span>,</span>
@@ -342,7 +378,7 @@
 <span><span class="co">#&gt;               subject_id  object_id decision confidence   model</span></span>
 <span><span class="co">#&gt; 1 readme-judgment:000001 HP:0004322     keep          1 Rbebelm</span></span></code></pre></div>
 <p>Benchmarks are ordinary R data flowing through pipes. The metrics below use gold HPO phenotypes and expose the current lexical baseline before model judgment removes negated or disease-level mentions.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">suite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_benchmark_cases.html">ducksemantics_benchmark_cases</a></span><span class="op">(</span></span>
 <span>  cases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
 <span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
@@ -367,20 +403,20 @@
 <span><span class="co">#&gt;   suite: readme-hpo-mondo</span></span>
 <span><span class="co">#&gt;   task: grounding</span></span>
 <span><span class="co">#&gt;   cases: 1</span></span>
-<span><span class="co">#&gt;   elapsed: 0.120 s</span></span>
+<span><span class="co">#&gt;   elapsed: 0.172 s</span></span>
 <span><span class="co">#&gt;   F1: 0.727</span></span>
 <span><span class="va">result</span><span class="op">$</span><span class="va">summary</span></span>
 <span><span class="co">#&gt;              suite      task case_count gold_count prediction_count elapsed_seconds</span></span>
-<span><span class="co">#&gt; 1 readme-hpo-mondo grounding          1          4               13            0.12</span></span>
+<span><span class="co">#&gt; 1 readme-hpo-mondo grounding          1          4               13           0.172</span></span>
 <span><span class="co">#&gt;   case_seconds token_count tokens_per_second cases_per_second prediction_bytes</span></span>
-<span><span class="co">#&gt; 1        0.118          15               125         8.333333             6152</span></span>
+<span><span class="co">#&gt; 1        0.169          15           87.2093         5.813953             6152</span></span>
 <span><span class="va">result</span><span class="op">$</span><span class="va">metrics</span></span>
 <span><span class="co">#&gt;     by tp fp fn precision recall        f1</span></span>
 <span><span class="co">#&gt; 1 node  4  3  0 0.5714286      1 0.7272727</span></span>
 <span><span class="va">result</span><span class="op">$</span><span class="va">timings</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"seconds"</span>, <span class="st">"token_count"</span>, <span class="st">"gold_count"</span>, <span class="st">"prediction_count"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;           case_id seconds token_count gold_count prediction_count</span></span>
-<span><span class="co">#&gt; 1 readme-case-001   0.118          15          4               13</span></span></code></pre></div>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<span><span class="co">#&gt; 1 readme-case-001   0.169          15          4               13</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">conn</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><div class="links">

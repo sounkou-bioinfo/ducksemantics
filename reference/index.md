@@ -18,8 +18,14 @@
   : Store an embedding batch in DuckDB
 - [`ducksemantics_token_embedding_batch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_token_embedding_batch.md)
   : Construct a token embedding batch
+- [`ducksemantics_token_embedding_batch_from_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_token_embedding_batch_from_provider.md)
+  : Construct a token embedding batch from a provider
 - [`ducksemantics_write_token_embeddings()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_write_token_embeddings.md)
   : Store token embeddings for late-interaction scoring
+- [`ducksemantics_token_embedding_query()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_token_embedding_query.md)
+  : Construct a token embedding late-interaction query
+- [`ducksemantics_late_interaction_search()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_late_interaction_search.md)
+  : Search token embeddings with exact late interaction
 - [`ducksemantics_embedding_query()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_query.md)
   : Construct an embedding search query
 - [`ducksemantics_embedding_search()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_search.md)
@@ -46,6 +52,8 @@
   : Embedding batch for the semantic store
 - [`DucksemanticsTokenEmbeddingBatch()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTokenEmbeddingBatch.md)
   : Token embedding batch for late-interaction storage
+- [`DucksemanticsTokenEmbeddingQuery()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTokenEmbeddingQuery.md)
+  : Token embedding late-interaction query
 - [`DucksemanticsEmbeddingQuery()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingQuery.md)
   : Embedding search query
 - [`DucksemanticsEmbeddingIndexSpec()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingIndexSpec.md)
@@ -89,8 +97,11 @@
   : Structural interface for judgment parsers
 - [`DucksemanticsEmbeddingProvider`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsEmbeddingProvider.md)
   : Structural interface for embedding providers
+- [`DucksemanticsTokenEmbeddingProvider`](https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTokenEmbeddingProvider.md)
+  : Structural interface for token embedding providers
 - [`ducksemantics_run()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   [`ducksemantics_embed()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
+  [`ducksemantics_token_embed()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   [`ducksemantics_parse()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   [`ducksemantics_ground()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md)
   : Provider interface generics
@@ -102,12 +113,16 @@
   : Wrap a prompt function as a typed prompt runner
 - [`ducksemantics_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_provider.md)
   : Wrap an embedding function as a typed embedding provider
+- [`ducksemantics_token_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_token_embedding_provider.md)
+  : Wrap a token embedding function as a typed token provider
 - [`ducksemantics_json_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_json_judgment_parser.md)
   : Create the default JSON judgment parser
 - [`ducksemantics_bebel_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_runner.md)
   : Create a BebeLM prompt runner
 - [`ducksemantics_bebel_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_embedding_provider.md)
   : Create a BebeLM embedding provider
+- [`ducksemantics_bebel_token_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_token_embedding_provider.md)
+  : Create a BebeLM token embedding provider
 - [`ducksemantics_bebel_tool_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_tool_judgment_parser.md)
   : Create a BebeLM tool-call judgment parser
 

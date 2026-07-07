@@ -12,6 +12,8 @@ ducksemantics_run(provider, prompt, ...)
 
 ducksemantics_embed(provider, text, ...)
 
+ducksemantics_token_embed(provider, text, ...)
+
 ducksemantics_parse(parser, response, ...)
 
 ducksemantics_ground(
