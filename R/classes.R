@@ -381,6 +381,158 @@ ducksemantics_token_embedding_batch <- function(embeddings,
   )
 }
 
+#' Construct a token embedding batch from a provider
+#'
+#' @param text Character vector to embed.
+#' @param provider Object implementing `DucksemanticsTokenEmbeddingProvider`.
+#' @param subject_id Subject identifiers for input texts. Defaults to `text`.
+#' @param subject_kind Subject type for stored token rows.
+#' @param provider_label Stored provider label. Defaults to the provider label
+#'   when available.
+#' @param block_id Optional block id per input text.
+#' @param attrs Optional attrs value per input text.
+#' @param ... Extra arguments passed to `ducksemantics_token_embed()`.
+#' @return A `DucksemanticsTokenEmbeddingBatch` object.
+#' @export
+ducksemantics_token_embedding_batch_from_provider <- function(text,
+                                                             provider,
+                                                             subject_id = text,
+                                                             subject_kind = "node",
+                                                             provider_label = NULL,
+                                                             block_id = NULL,
+                                                             attrs = NULL,
+                                                             ...) {
+  if (!is.character(text) || anyNA(text)) {
+    stop("`text` must be a character vector without NA.", call. = FALSE)
+  }
+  if (!length(text)) {
+    stop("`text` must contain at least one value.", call. = FALSE)
+  }
+  subject_id <- as.character(subject_id)
+  if (length(subject_id) != length(text) || anyNA(subject_id) || any(!nzchar(subject_id))) {
+    stop("`subject_id` must contain one non-empty value per input text.", call. = FALSE)
+  }
+  S7::prop(DucksemanticsScalarText(value = subject_kind), "value")
+  if (is.null(provider_label)) {
+    provider_label <- if (S7::S7_inherits(provider, ducksemantics_bebel_token_embedding_provider_class) ||
+      S7::S7_inherits(provider, ducksemantics_function_token_embedding_provider_class)) {
+      provider@label
+    } else {
+      class(provider)[[1L]]
+    }
+  }
+  S7::prop(DucksemanticsScalarText(value = provider_label), "value")
+  if (!is.null(block_id) && (length(block_id) != length(text) || anyNA(block_id) || any(!nzchar(block_id)))) {
+    stop("`block_id` must be NULL or contain one non-empty value per input text.", call. = FALSE)
+  }
+  if (!is.null(attrs) && !(length(attrs) %in% c(1L, length(text)))) {
+    stop("`attrs` must be NULL, length 1, or one value per input text.", call. = FALSE)
+  }
+
+  token_objects <- ducksemantics_token_embed(provider, text, ...)
+  if (!is.list(token_objects) || length(token_objects) != length(text)) {
+    stop("Token embedding providers must return one object per input text.", call. = FALSE)
+  }
+  embeddings <- vector("list", length(token_objects))
+  subject_ids <- character()
+  token_index <- integer()
+  tokens <- character()
+  block_ids <- character()
+  attrs_out <- character()
+  attrs_values <- if (is.null(attrs)) rep(NA_character_, length(text)) else rep(as.character(attrs), length.out = length(text))
+  for (i in seq_along(token_objects)) {
+    one <- token_objects[[i]]
+    if (is.null(one$embeddings) || !is.matrix(one$embeddings)) {
+      stop("Token embedding object ", i, " must contain an `embeddings` matrix.", call. = FALSE)
+    }
+    one_embeddings <- S7::prop(DucksemanticsEmbeddingMatrix(embeddings = one$embeddings, rows = nrow(one$embeddings)), "embeddings")
+    n_tokens <- nrow(one_embeddings)
+    embeddings[[i]] <- one_embeddings
+    subject_ids <- c(subject_ids, rep(subject_id[[i]], n_tokens))
+    token_index <- c(token_index, if (is.null(one$token_index)) seq_len(n_tokens) - 1L else as.integer(one$token_index))
+    tokens <- c(tokens, if (is.null(one$tokens)) rep(NA_character_, n_tokens) else rep(as.character(one$tokens), length.out = n_tokens))
+    block_value <- if (is.null(block_id)) paste(provider_label, subject_kind, subject_id[[i]], sep = "::") else block_id[[i]]
+    block_ids <- c(block_ids, rep(block_value, n_tokens))
+    attrs_out <- c(attrs_out, rep(attrs_values[[i]], n_tokens))
+  }
+  ducksemantics_token_embedding_batch(
+    embeddings = do.call(rbind, embeddings),
+    subject_id = subject_ids,
+    subject_kind = subject_kind,
+    provider = provider_label,
+    token_index = token_index,
+    block_id = block_ids,
+    token = if (all(is.na(tokens))) NULL else tokens,
+    attrs = if (all(is.na(attrs_out))) NULL else attrs_out
+  )
+}
+
+#' Token embedding late-interaction query
+#'
+#' @param embeddings Numeric query-token matrix.
+#' @param provider Optional provider filter.
+#' @param subject_kind Optional subject-kind filter.
+#' @param top_k Number of scored blocks to return.
+#' @param table Optional table to search. Defaults to `semantic_token_embeddings`.
+#' @param candidate_subject_id Optional candidate subject identifiers.
+#' @return A `DucksemanticsTokenEmbeddingQuery` object.
+#' @export
+DucksemanticsTokenEmbeddingQuery <- S7::new_class(
+  "DucksemanticsTokenEmbeddingQuery",
+  package = "ducksemantics",
+  properties = list(
+    embeddings = ducksemantics_matrix_property,
+    provider = S7::new_union(NULL, S7::class_character),
+    subject_kind = S7::new_union(NULL, S7::class_character),
+    top_k = ducksemantics_positive_integer_property,
+    table = S7::new_union(NULL, S7::class_character),
+    candidate_subject_id = S7::new_union(NULL, S7::class_character)
+  ),
+  validator = function(self) {
+    for (field in c("provider", "subject_kind", "table")) {
+      value <- S7::prop(self, field)
+      if (!is.null(value) && (length(value) != 1L || is.na(value) || !nzchar(value))) {
+        return(paste0("@", field, " must be NULL or a non-empty character scalar"))
+      }
+    }
+    candidates <- S7::prop(self, "candidate_subject_id")
+    if (!is.null(candidates) && (!length(candidates) || anyNA(candidates) || any(!nzchar(candidates)))) {
+      return("@candidate_subject_id must be NULL or a non-empty character vector without missing values")
+    }
+    table <- S7::prop(self, "table")
+    if (!is.null(table)) {
+      invalid <- tryCatch({
+        DucksemanticsSqlIdentifier(value = table, qualified = TRUE)
+        NULL
+      }, error = function(e) "@table must be a valid SQL identifier")
+      if (!is.null(invalid)) return(invalid)
+    }
+    NULL
+  }
+)
+
+#' Construct a token embedding late-interaction query
+#'
+#' @inheritParams DucksemanticsTokenEmbeddingQuery
+#' @export
+ducksemantics_token_embedding_query <- function(embeddings,
+                                                provider = NULL,
+                                                subject_kind = NULL,
+                                                top_k = 10L,
+                                                table = NULL,
+                                                candidate_subject_id = NULL) {
+  embeddings <- as.matrix(embeddings)
+  storage.mode(embeddings) <- "double"
+  DucksemanticsTokenEmbeddingQuery(
+    embeddings = embeddings,
+    provider = if (is.null(provider)) NULL else as.character(provider),
+    subject_kind = if (is.null(subject_kind)) NULL else as.character(subject_kind),
+    top_k = as.integer(top_k),
+    table = if (is.null(table)) NULL else as.character(table),
+    candidate_subject_id = if (is.null(candidate_subject_id)) NULL else as.character(candidate_subject_id)
+  )
+}
+
 #' Embedding search query
 #'
 #' @param embedding Numeric query embedding.

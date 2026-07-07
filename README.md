@@ -223,6 +223,48 @@ ducksemantics_embedding_query(
 #> 3          seizures  readme_term Rbebelm mean          seizures 2048 0.9351248
 ```
 
+Late interaction uses token-level hidden states. The first
+implementation is an exact MaxSim reranker over stored token blocks,
+intended for candidate sets from aliases, FTS, graph neighborhoods, or
+pooled-vector search.
+
+``` r
+token_provider <- ducksemantics_bebel_token_embedding_provider(
+  model,
+  label = "Rbebelm token",
+  token_batch_size = 512L,
+  check_interrupt = TRUE
+)
+
+token_batch <- ducksemantics_cache_rds(
+  file.path(cache_dir, "readme-bebel-token-embeddings.rds"),
+  function() {
+    ducksemantics_token_embedding_batch_from_provider(
+      embedding_terms,
+      provider = token_provider,
+      subject_id = embedding_terms,
+      subject_kind = "readme_term"
+    )
+  }
+)
+
+token_batch |>
+  ducksemantics_write_token_embeddings(conn, replace = TRUE)
+
+query_tokens <- ducksemantics_token_embed(token_provider, "short height")[[1L]]
+
+ducksemantics_token_embedding_query(
+  query_tokens$embeddings,
+  provider = "Rbebelm token",
+  subject_kind = "readme_term",
+  top_k = 3
+) |>
+  ducksemantics_late_interaction_search(conn)
+#> <ducksemantics late-interaction result>
+#>   blocks: 3
+#>   top score: 0.9079
+```
+
 The first semantic measurement is ontology clustering: embed every HPO
 and MONDO label, store the vectors in DuckDB, cluster them, and compare
 cluster assignments against direct graph edges. The embeddings are
@@ -371,19 +413,19 @@ result
 #>   suite: readme-hpo-mondo
 #>   task: grounding
 #>   cases: 1
-#>   elapsed: 0.120 s
+#>   elapsed: 0.172 s
 #>   F1: 0.727
 result$summary
 #>              suite      task case_count gold_count prediction_count elapsed_seconds
-#> 1 readme-hpo-mondo grounding          1          4               13            0.12
+#> 1 readme-hpo-mondo grounding          1          4               13           0.172
 #>   case_seconds token_count tokens_per_second cases_per_second prediction_bytes
-#> 1        0.118          15               125         8.333333             6152
+#> 1        0.169          15           87.2093         5.813953             6152
 result$metrics
 #>     by tp fp fn precision recall        f1
 #> 1 node  4  3  0 0.5714286      1 0.7272727
 result$timings[, c("case_id", "seconds", "token_count", "gold_count", "prediction_count")]
 #>           case_id seconds token_count gold_count prediction_count
-#> 1 readme-case-001   0.118          15          4               13
+#> 1 readme-case-001   0.169          15          4               13
 ```
 
 ``` r

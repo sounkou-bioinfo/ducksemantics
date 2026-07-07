@@ -4,6 +4,7 @@
 \alias{ducksemantics_provider_generics}
 \alias{ducksemantics_run}
 \alias{ducksemantics_embed}
+\alias{ducksemantics_token_embed}
 \alias{ducksemantics_parse}
 \alias{ducksemantics_ground}
 \title{Provider interface generics}
@@ -11,6 +12,8 @@
 ducksemantics_run(provider, prompt, ...)
 
 ducksemantics_embed(provider, text, ...)
+
+ducksemantics_token_embed(provider, text, ...)
 
 ducksemantics_parse(parser, response, ...)
 

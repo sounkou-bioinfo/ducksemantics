@@ -13,7 +13,10 @@ reference:
       - ducksemantics_embedding_batch
       - ducksemantics_write_embeddings
       - ducksemantics_token_embedding_batch
+      - ducksemantics_token_embedding_batch_from_provider
       - ducksemantics_write_token_embeddings
+      - ducksemantics_token_embedding_query
+      - ducksemantics_late_interaction_search
       - ducksemantics_embedding_query
       - ducksemantics_embedding_search
       - ducksemantics_embedding_index_spec
@@ -27,6 +30,7 @@ reference:
       - ducksemantics_index_stats
       - DucksemanticsEmbeddingBatch
       - DucksemanticsTokenEmbeddingBatch
+      - DucksemanticsTokenEmbeddingQuery
       - DucksemanticsEmbeddingQuery
       - DucksemanticsEmbeddingIndexSpec
       - DucksemanticsEmbeddingClusterSpec
@@ -50,17 +54,21 @@ reference:
       - DucksemanticsPromptRunner
       - DucksemanticsJudgmentParser
       - DucksemanticsEmbeddingProvider
+      - DucksemanticsTokenEmbeddingProvider
       - ducksemantics_ground
       - ducksemantics_run
       - ducksemantics_parse
       - ducksemantics_embed
+      - ducksemantics_token_embed
       - ducksemantics_embed_cached
       - ducksemantics_lexical_annotator
       - ducksemantics_prompt_runner
       - ducksemantics_embedding_provider
+      - ducksemantics_token_embedding_provider
       - ducksemantics_json_judgment_parser
       - ducksemantics_bebel_runner
       - ducksemantics_bebel_embedding_provider
+      - ducksemantics_bebel_token_embedding_provider
       - ducksemantics_bebel_tool_judgment_parser
   - title: Model Judgment
     contents:

@@ -54,6 +54,26 @@ embedding_provider <- ducksemantics_embedding_provider(function(text) {
 expect_true(s7contract::implements(embedding_provider, DucksemanticsEmbeddingProvider))
 expect_equal(dim(ducksemantics_embed(embedding_provider, c("alpha", "beta"))), c(2L, 1L))
 
+token_provider <- ducksemantics_token_embedding_provider(function(text) {
+  lapply(seq_along(text), function(i) {
+    tokens <- strsplit(text[[i]], " ", fixed = TRUE)[[1L]]
+    list(
+      embeddings = cbind(seq_along(tokens), rev(seq_along(tokens))),
+      token_index = seq_along(tokens) - 1L,
+      tokens = tokens
+    )
+  })
+}, label = "tiny-token-provider")
+expect_true(s7contract::implements(token_provider, DucksemanticsTokenEmbeddingProvider))
+token_provider_batch <- ducksemantics_token_embedding_batch_from_provider(
+  c("short stature", "seizure"),
+  provider = token_provider,
+  subject_id = c("HP:0004322", "HP:0001250"),
+  subject_kind = "node"
+)
+expect_true(S7::S7_inherits(token_provider_batch, DucksemanticsTokenEmbeddingBatch))
+expect_equal(nrow(S7::prop(token_provider_batch, "embeddings")), 3L)
+
 chunk_cache_dir <- tempfile()
 chunk_calls <- 0L
 chunk_provider <- ducksemantics_embedding_provider(function(text) {
@@ -218,6 +238,35 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
     ducksemantics_write_token_embeddings(conn, replace = TRUE)
   expect_equal(nrow(token_rows), 3L)
   expect_equal(token_rows$token_index, c(0L, 1L, 0L))
+
+  late_hits <- ducksemantics_token_embedding_query(
+    matrix(
+      c(
+        1.0, 0.0,
+        0.0, 1.0
+      ),
+      ncol = 2L,
+      byrow = TRUE
+    ),
+    provider = "tiny-token",
+    subject_kind = "node",
+    top_k = 2L
+  ) |>
+    ducksemantics_late_interaction_search(conn)
+  expect_true(inherits(late_hits, "ducksemantics_late_interaction_result"))
+  expect_equal(late_hits$subject_id[[1L]], "HP:0004322")
+  expect_equal(nrow(late_hits), 2L)
+  expect_true(late_hits$score[[1L]] > late_hits$score[[2L]])
+
+  candidate_hit <- ducksemantics_token_embedding_query(
+    matrix(c(0.0, 1.0), ncol = 2L),
+    provider = "tiny-token",
+    subject_kind = "node",
+    candidate_subject_id = "HP:0001250",
+    top_k = 5L
+  ) |>
+    ducksemantics_late_interaction_search(conn)
+  expect_equal(candidate_hit$subject_id, "HP:0001250")
 
   vector_hits <- ducksemantics_embedding_query(
     c(1, 0, 0),

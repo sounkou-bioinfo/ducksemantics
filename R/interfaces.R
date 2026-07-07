@@ -40,6 +40,14 @@ ducksemantics_embed <- S7::new_generic(
 
 #' @rdname ducksemantics_provider_generics
 #' @export
+ducksemantics_token_embed <- S7::new_generic(
+  "ducksemantics_token_embed",
+  "provider",
+  function(provider, text, ...) S7::S7_dispatch()
+)
+
+#' @rdname ducksemantics_provider_generics
+#' @export
 ducksemantics_parse <- S7::new_generic(
   "ducksemantics_parse",
   "parser",
@@ -86,6 +94,25 @@ DucksemanticsEmbeddingProvider <- s7contract::new_interface(
   generics = list(
     embed = s7contract::interface_requirement(
       ducksemantics_embed,
+      args = list(text = S7::class_character),
+      returns = S7::class_any
+    )
+  )
+)
+
+#' Structural interface for token embedding providers
+#'
+#' A token embedding provider accepts a character vector and returns one
+#' token-embedding object per input text. Each object contains an `embeddings`
+#' matrix and token metadata.
+#'
+#' @export
+DucksemanticsTokenEmbeddingProvider <- s7contract::new_interface(
+  "DucksemanticsTokenEmbeddingProvider",
+  package = "ducksemantics",
+  generics = list(
+    token_embed = s7contract::interface_requirement(
+      ducksemantics_token_embed,
       args = list(text = S7::class_character),
       returns = S7::class_any
     )
@@ -162,6 +189,15 @@ ducksemantics_function_embedding_provider_class <- S7::new_class(
   )
 )
 
+ducksemantics_function_token_embedding_provider_class <- S7::new_class(
+  "ducksemantics_function_token_embedding_provider",
+  package = "ducksemantics",
+  properties = list(
+    fun = S7::class_function,
+    label = S7::class_character
+  )
+)
+
 ducksemantics_bebel_embedding_provider_class <- S7::new_class(
   "ducksemantics_bebel_embedding_provider",
   package = "ducksemantics",
@@ -172,6 +208,19 @@ ducksemantics_bebel_embedding_provider_class <- S7::new_class(
     pooling = S7::class_character,
     token_batch_size = ducksemantics_positive_integer_property,
     sequence_batch_size = ducksemantics_positive_integer_property,
+    check_interrupt = ducksemantics_flag_property
+  )
+)
+
+ducksemantics_bebel_token_embedding_provider_class <- S7::new_class(
+  "ducksemantics_bebel_token_embedding_provider",
+  package = "ducksemantics",
+  properties = list(
+    model = S7::class_any,
+    label = ducksemantics_text_property,
+    add_bos = S7::class_logical,
+    normalize = S7::class_logical,
+    token_batch_size = ducksemantics_positive_integer_property,
     check_interrupt = ducksemantics_flag_property
   )
 )
@@ -229,6 +278,19 @@ ducksemantics_embedding_provider <- function(fun, label = "function") {
   ducksemantics_function_embedding_provider_class(fun = fun, label = label)
 }
 
+#' Wrap a token embedding function as a typed token provider
+#'
+#' @param fun Function accepting a character vector and returning one
+#'   token-embedding object per input text.
+#' @param label Provider label for stored token rows.
+#' @return An object implementing `DucksemanticsTokenEmbeddingProvider`.
+#' @export
+ducksemantics_token_embedding_provider <- function(fun, label = "function-token") {
+  if (!is.function(fun)) stop("`fun` must be a function.", call. = FALSE)
+  S7::prop(DucksemanticsScalarText(value = label), "value")
+  ducksemantics_function_token_embedding_provider_class(fun = fun, label = label)
+}
+
 #' Create a BebeLM embedding provider
 #'
 #' @param model A `Rbebelm` `BebelModel` object.
@@ -262,6 +324,40 @@ ducksemantics_bebel_embedding_provider <- function(model,
     pooling = pooling,
     token_batch_size = token_batch_size,
     sequence_batch_size = sequence_batch_size,
+    check_interrupt = check_interrupt
+  )
+}
+
+#' Create a BebeLM token embedding provider
+#'
+#' @param model A `Rbebelm` `BebelModel` object.
+#' @param label Provider label for stored token rows.
+#' @param add_bos Include BOS in tokenization? Defaults to `FALSE` for
+#'   late-interaction scoring.
+#' @param normalize L2-normalize token embeddings?
+#' @param token_batch_size Number of tokens per Rust batched prefill/matmul call.
+#' @param check_interrupt Whether long token embedding runs should poll R
+#'   interrupts between token batches.
+#' @return An object implementing `DucksemanticsTokenEmbeddingProvider`.
+#' @export
+ducksemantics_bebel_token_embedding_provider <- function(model,
+                                                         label = "Rbebelm token",
+                                                         add_bos = FALSE,
+                                                         normalize = TRUE,
+                                                         token_batch_size = 512L,
+                                                         check_interrupt = TRUE) {
+  if (!requireNamespace("Rbebelm", quietly = TRUE)) {
+    stop("Rbebelm is required for the BebeLM token embedding provider.", call. = FALSE)
+  }
+  S7::prop(DucksemanticsScalarText(value = label), "value")
+  S7::prop(DucksemanticsFlag(value = add_bos), "value")
+  S7::prop(DucksemanticsFlag(value = normalize), "value")
+  ducksemantics_bebel_token_embedding_provider_class(
+    model = model,
+    label = label,
+    add_bos = add_bos,
+    normalize = normalize,
+    token_batch_size = token_batch_size,
     check_interrupt = check_interrupt
   )
 }
@@ -333,6 +429,33 @@ S7::method(ducksemantics_embed, ducksemantics_bebel_embedding_provider_class) <-
     check_interrupt = provider@check_interrupt
   )
   S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
+}
+
+S7::method(ducksemantics_token_embed, ducksemantics_function_token_embedding_provider_class) <- function(provider, text, ...) {
+  if (!is.character(text) || anyNA(text)) {
+    stop("`text` must be a character vector without NA.", call. = FALSE)
+  }
+  out <- provider@fun(text, ...)
+  if (!is.list(out) || length(out) != length(text)) {
+    stop("Token embedding providers must return one object per input text.", call. = FALSE)
+  }
+  out
+}
+
+S7::method(ducksemantics_token_embed, ducksemantics_bebel_token_embedding_provider_class) <- function(provider, text, ...) {
+  if (!is.character(text) || anyNA(text)) {
+    stop("`text` must be a character vector without NA.", call. = FALSE)
+  }
+  lapply(text, function(one) {
+    Rbebelm::bebel_token_embed(
+      provider@model,
+      one,
+      add_bos = provider@add_bos,
+      normalize = provider@normalize,
+      token_batch_size = provider@token_batch_size,
+      check_interrupt = provider@check_interrupt
+    )
+  })
 }
 
 #' Cache provider embeddings in durable chunks

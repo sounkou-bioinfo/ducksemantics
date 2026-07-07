@@ -153,10 +153,10 @@ semantic_embedding_centroids(
 );
 ```
 
-`semantic_token_embeddings` is the table-space for later late-interaction
-scoring. The first working model stores pooled BebeLM embeddings in
-`semantic_embeddings`; token matrices become active when the provider exposes
-real token-level hidden states.
+`semantic_token_embeddings` stores token-level matrices for exact
+late-interaction scoring. The pooled path in `semantic_embeddings` remains the
+cheap broad-rank layer; token matrices rerank candidate blocks with MaxSim when
+lexical, graph, or pooled-vector retrieval needs finer evidence.
 
 ## Interfaces
 
@@ -177,6 +177,8 @@ Store/query specs are S7 structs with property validators:
 - `DucksemanticsEmbeddingBatch`: rows to store in `semantic_embeddings`.
 - `DucksemanticsTokenEmbeddingBatch`: token rows grouped by `block_id` for
   late-interaction scoring.
+- `DucksemanticsTokenEmbeddingQuery`: query token matrix and filters for exact
+  MaxSim reranking over stored token blocks.
 - `DucksemanticsEmbeddingQuery`: vector search request over DuckDB arrays.
 - `DucksemanticsEmbeddingIndexSpec`: fixed-dimension materialized table and
   optional HNSW index request.
@@ -206,6 +208,8 @@ ducksemantics_index_aliases()
 ducksemantics_annotate()
 ducksemantics_embedding_batch(...) |> ducksemantics_write_embeddings(conn)
 ducksemantics_embedding_query(...) |> ducksemantics_embedding_search(conn)
+ducksemantics_token_embedding_batch_from_provider(...) |> ducksemantics_write_token_embeddings(conn)
+ducksemantics_token_embedding_query(...) |> ducksemantics_late_interaction_search(conn)
 ducksemantics_embedding_cluster_spec(...) |> ducksemantics_cluster_embeddings(conn)
 ducksemantics_embedding_cluster_graph_agreement(conn, cluster_run_id)
 ducksemantics_judge()

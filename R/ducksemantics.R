@@ -926,6 +926,116 @@ ducksemantics_write_token_embeddings <- function(batch,
   invisible(rows)
 }
 
+#' Search token embeddings with exact late interaction
+#'
+#' Scores stored token-embedding blocks with ColBERT-style MaxSim. For each
+#' query token, the scorer finds the best matching token in a candidate block
+#' and averages those maxima. This is the exact reranking primitive for
+#' candidate sets produced by lexical aliases, FTS, graph neighborhoods, or
+#' pooled-vector search.
+#'
+#' @param query A `DucksemanticsTokenEmbeddingQuery` object from
+#'   `ducksemantics_token_embedding_query()`.
+#' @param conn DBI connection.
+#' @param prefix Prefix used for semantic tables.
+#' @return Data frame ordered by descending MaxSim score.
+#' @export
+ducksemantics_late_interaction_search <- function(query,
+                                                  conn,
+                                                  prefix = "semantic") {
+  if (!S7::S7_inherits(query, DucksemanticsTokenEmbeddingQuery)) {
+    query <- ducksemantics_token_embedding_query(query)
+  }
+  S7::prop(DucksemanticsDbConnection(value = conn), "value")
+  query_embeddings <- S7::prop(query, "embeddings")
+  provider <- S7::prop(query, "provider")
+  subject_kind <- S7::prop(query, "subject_kind")
+  top_k <- as.integer(S7::prop(query, "top_k"))
+  candidate_subject_id <- S7::prop(query, "candidate_subject_id")
+  dim <- ncol(query_embeddings)
+  query_embeddings <- ducksemantics_l2_normalize_rows(query_embeddings)
+  tables <- ducksemantics_tables(prefix)
+  table <- S7::prop(query, "table") %||% tables[["token_embeddings"]]
+  table <- S7::prop(DucksemanticsSqlIdentifier(value = table, qualified = TRUE), "value")
+  filters <- c(
+    paste0("dim = ", dim),
+    "embedding IS NOT NULL",
+    "storage = 'duckdb_float_array'"
+  )
+  if (!is.null(provider)) {
+    filters <- c(filters, paste0("provider = ", ducksemantics_quote_string(provider)))
+  }
+  if (!is.null(subject_kind)) {
+    filters <- c(filters, paste0("subject_kind = ", ducksemantics_quote_string(subject_kind)))
+  }
+  if (!is.null(candidate_subject_id)) {
+    filters <- c(filters, paste0(
+      "subject_id IN (",
+      paste(ducksemantics_quote_string(unique(candidate_subject_id)), collapse = ", "),
+      ")"
+    ))
+  }
+  rows <- DBI::dbGetQuery(
+    conn,
+    paste0(
+      "SELECT block_id, subject_id, subject_kind, provider, token_index, token, dim, embedding ",
+      "FROM ", ducksemantics_quote_ident(table),
+      " WHERE ", paste(filters, collapse = " AND "),
+      " ORDER BY block_id, token_index"
+    )
+  )
+  empty <- data.frame(
+    block_id = character(),
+    subject_id = character(),
+    subject_kind = character(),
+    provider = character(),
+    dim = integer(),
+    score = numeric(),
+    score_sum = numeric(),
+    query_token_count = integer(),
+    candidate_token_count = integer(),
+    best_token_index = character(),
+    best_token = character(),
+    stringsAsFactors = FALSE
+  )
+  if (!nrow(rows)) {
+    class(empty) <- c("ducksemantics_late_interaction_result", class(empty))
+    return(empty)
+  }
+  stored_embeddings <- ducksemantics_l2_normalize_rows(
+    ducksemantics_embedding_column_matrix(rows$embedding, dim)
+  )
+  groups <- split(seq_len(nrow(rows)), rows$block_id)
+  scored <- lapply(groups, function(idx) {
+    candidate <- stored_embeddings[idx, , drop = FALSE]
+    sims <- query_embeddings %*% t(candidate)
+    best <- max.col(sims, ties.method = "first")
+    best_scores <- sims[cbind(seq_len(nrow(sims)), best)]
+    best_rows <- idx[best]
+    data.frame(
+      block_id = rows$block_id[[idx[[1L]]]],
+      subject_id = rows$subject_id[[idx[[1L]]]],
+      subject_kind = rows$subject_kind[[idx[[1L]]]],
+      provider = rows$provider[[idx[[1L]]]],
+      dim = dim,
+      score = mean(best_scores),
+      score_sum = sum(best_scores),
+      query_token_count = nrow(query_embeddings),
+      candidate_token_count = length(idx),
+      best_token_index = paste(rows$token_index[best_rows], collapse = ","),
+      best_token = paste(rows$token[best_rows], collapse = ""),
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, scored)
+  row.names(out) <- NULL
+  out <- out[order(out$score, decreasing = TRUE), , drop = FALSE]
+  out <- utils::head(out, top_k)
+  row.names(out) <- NULL
+  class(out) <- c("ducksemantics_late_interaction_result", class(out))
+  out
+}
+
 #' Search embeddings with DuckDB vector functions
 #'
 #' @param query A [DucksemanticsEmbeddingQuery] object from
@@ -1452,6 +1562,16 @@ print.ducksemantics_benchmark_result <- function(x, ...) {
   invisible(x)
 }
 
+#' @export
+print.ducksemantics_late_interaction_result <- function(x, ...) {
+  cat("<ducksemantics late-interaction result>\n")
+  cat("  blocks: ", nrow(x), "\n", sep = "")
+  if (nrow(x)) {
+    cat("  top score: ", sprintf("%.4f", x$score[[1L]]), "\n", sep = "")
+  }
+  invisible(x)
+}
+
 #' Compute benchmark precision and recall
 #'
 #' @param predictions Prediction data frame from [ducksemantics_benchmark()]
@@ -1799,6 +1919,15 @@ ducksemantics_embedding_column_matrix <- function(embedding,
   if (anyNA(x) || any(!is.finite(x))) {
     stop("Embedding rows must contain only finite non-missing values.", call. = FALSE)
   }
+  x
+}
+
+ducksemantics_l2_normalize_rows <- function(x) {
+  x <- as.matrix(x)
+  storage.mode(x) <- "double"
+  norms <- sqrt(rowSums(x * x))
+  good <- is.finite(norms) & norms > 0
+  x[good, ] <- x[good, , drop = FALSE] / norms[good]
   x
 }
 
