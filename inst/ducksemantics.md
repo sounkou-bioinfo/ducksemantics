@@ -7,8 +7,11 @@ clusters, closure SQL, typed model-provider interfaces, and benchmark
 measurement.
 
 HPO, MONDO, ORPHANET, study notes, memory, run ledgers, and local concept maps
-are graph sources that project into the same tables. A future DuckDB extension
-can optimize hot paths, but the package API is not waiting on it.
+are graph sources that project into the same tables. ClinVar VCV/RCV XML is the
+same kind of source: a large clinical-variant assertion graph that should
+project into stable DuckDB tables before it projects into semantic nodes and
+edges. A future DuckDB extension can optimize hot paths, but the package API is
+not waiting on it.
 
 ## Concrete Sources Being Abstracted
 
@@ -22,6 +25,8 @@ The abstraction closes over these existing shapes:
   `entailed_edge` provide an ontology interchange shape.
 - Rbebelm/bebelm: local CPU model judgment and embedding can enrich, reject,
   or explain deterministic candidates without owning the graph schema.
+- ClinVar XML: VCV/RCV releases become variant, assertion, trait, gene,
+  location, cross-reference, and semantic graph tables. See `inst/clinvar.md`.
 
 ## Core Tables
 
@@ -216,3 +221,8 @@ judgment. The lexical DuckDB matcher sets the transparent floor; benchmark
 failures decide where synonym expansion, vector reranking, late interaction,
 negation, uncertainty, and family-history adjudication actually improve HPO and
 MONDO tasks.
+
+Benchmark results carry suite/task/source/version metadata, per-case metrics,
+aggregate throughput, index statistics, and package-version provenance. That is
+the minimum paper-grade record: the cases, graph build, candidate generator,
+model provider, and measured runtime must be inspectable from the result object.

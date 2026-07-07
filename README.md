@@ -358,18 +358,32 @@ suite <- ducksemantics_benchmark_cases(
     node_id = c("HP:0001263", "HP:0001250", "HP:0004322", "HP:0001638"),
     stringsAsFactors = FALSE
   ),
-  suite = "readme-hpo-mondo"
+  suite = "readme-hpo-mondo",
+  source = "README.Rmd",
+  version = format(Sys.Date(), "%Y-%m-%d")
 )
 
-run <- suite |>
+result <- suite |>
   ducksemantics_benchmark(conn)
 
-run$metrics
+result
+#> <ducksemantics benchmark>
+#>   suite: readme-hpo-mondo
+#>   task: grounding
+#>   cases: 1
+#>   elapsed: 0.120 s
+#>   F1: 0.727
+result$summary
+#>              suite      task case_count gold_count prediction_count elapsed_seconds
+#> 1 readme-hpo-mondo grounding          1          4               13            0.12
+#>   case_seconds token_count tokens_per_second cases_per_second prediction_bytes
+#> 1        0.118          15               125         8.333333             6152
+result$metrics
 #>     by tp fp fn precision recall        f1
 #> 1 node  4  3  0 0.5714286      1 0.7272727
-run$timings[, c("case_id", "seconds", "token_count", "prediction_count", "prediction_bytes")]
-#>           case_id seconds token_count prediction_count prediction_bytes
-#> 1 readme-case-001   0.082          15               13             6152
+result$timings[, c("case_id", "seconds", "token_count", "gold_count", "prediction_count")]
+#>           case_id seconds token_count gold_count prediction_count
+#> 1 readme-case-001   0.118          15          4               13
 ```
 
 ``` r

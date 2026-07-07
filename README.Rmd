@@ -307,14 +307,18 @@ suite <- ducksemantics_benchmark_cases(
     node_id = c("HP:0001263", "HP:0001250", "HP:0004322", "HP:0001638"),
     stringsAsFactors = FALSE
   ),
-  suite = "readme-hpo-mondo"
+  suite = "readme-hpo-mondo",
+  source = "README.Rmd",
+  version = format(Sys.Date(), "%Y-%m-%d")
 )
 
-run <- suite |>
+result <- suite |>
   ducksemantics_benchmark(conn)
 
-run$metrics
-run$timings[, c("case_id", "seconds", "token_count", "prediction_count", "prediction_bytes")]
+result
+result$summary
+result$metrics
+result$timings[, c("case_id", "seconds", "token_count", "gold_count", "prediction_count")]
 ```
 
 ```{r}

@@ -1291,12 +1291,26 @@ ducksemantics_index_stats <- function(conn, prefix = "semantic") {
 #' @param gold Data frame with `case_id` and `node_id`. Optional span columns
 #'   are `span`, `start_offset`, and `end_offset`.
 #' @param suite Benchmark suite label.
+#' @param task Benchmark task label.
+#' @param source Optional source dataset label.
+#' @param version Optional source dataset version.
+#' @param metadata Optional named list of benchmark metadata.
 #' @return A benchmark object.
 #' @export
-ducksemantics_benchmark_cases <- function(cases, gold, suite = "semantic") {
+ducksemantics_benchmark_cases <- function(cases,
+                                          gold,
+                                          suite = "semantic",
+                                          task = "grounding",
+                                          source = NULL,
+                                          version = NULL,
+                                          metadata = list()) {
   cases <- S7::prop(DucksemanticsTable(value = cases, required = c("case_id", "text"), allow_empty = TRUE), "value")
   gold <- S7::prop(DucksemanticsTable(value = gold, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
   S7::prop(DucksemanticsScalarText(value = suite), "value")
+  S7::prop(DucksemanticsScalarText(value = task), "value")
+  if (!is.null(source)) S7::prop(DucksemanticsScalarText(value = source), "value")
+  if (!is.null(version)) S7::prop(DucksemanticsScalarText(value = version), "value")
+  if (!is.list(metadata)) stop("`metadata` must be a list.", call. = FALSE)
 
   cases <- cases[, c("case_id", "text", setdiff(names(cases), c("case_id", "text"))), drop = FALSE]
   gold <- ducksemantics_add_missing(gold, c(
@@ -1310,6 +1324,10 @@ ducksemantics_benchmark_cases <- function(cases, gold, suite = "semantic") {
 
   out <- list(
     suite = suite,
+    task = task,
+    source = source,
+    version = version,
+    metadata = metadata,
     cases = cases,
     gold = gold
   )
@@ -1344,31 +1362,36 @@ ducksemantics_benchmark <- function(benchmark,
   S7::prop(DucksemanticsFlag(value = record), "value")
   S7::prop(DucksemanticsFlag(value = collect_index_stats), "value")
 
+  started_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%OS3%z")
+  wall_start <- proc.time()[["elapsed"]]
   predictions <- list()
   timings <- vector("list", nrow(benchmark$cases))
   for (i in seq_len(nrow(benchmark$cases))) {
     case_id <- as.character(benchmark$cases$case_id[[i]])
     text <- as.character(benchmark$cases$text[[i]])
-    elapsed <- system.time({
-      pred <- ducksemantics_ground(
-        annotator = annotator,
-        conn = conn,
-        text = text,
-        document_id = case_id,
-        prefix = prefix,
-        longest_match = longest_match,
-        record = record
-      )
-    })
+    case_start <- proc.time()[["elapsed"]]
+    pred <- ducksemantics_ground(
+      annotator = annotator,
+      conn = conn,
+      text = text,
+      document_id = case_id,
+      prefix = prefix,
+      longest_match = longest_match,
+      record = record
+    )
+    case_seconds <- proc.time()[["elapsed"]] - case_start
     if (nrow(pred)) {
       pred$case_id <- case_id
       predictions[[length(predictions) + 1L]] <- pred
     }
     timings[[i]] <- data.frame(
       case_id = case_id,
-      seconds = unname(elapsed[["elapsed"]]),
+      seconds = case_seconds,
+      char_count = nchar(text, type = "chars"),
       token_count = nrow(ducksemantics_tokens(text)),
+      gold_count = sum(benchmark$gold$case_id == case_id),
       prediction_count = nrow(pred),
+      predicted_node_count = length(unique(pred$node_id)),
       prediction_bytes = as.numeric(utils::object.size(pred)),
       stringsAsFactors = FALSE
     )
@@ -1382,15 +1405,51 @@ ducksemantics_benchmark <- function(benchmark,
   row.names(predictions) <- NULL
   timings <- do.call(rbind, timings)
   metrics <- ducksemantics_benchmark_metrics(predictions, benchmark$gold)
+  case_metrics <- ducksemantics_benchmark_case_metrics(predictions, benchmark$gold, benchmark$cases$case_id)
+  elapsed_seconds <- proc.time()[["elapsed"]] - wall_start
+  summary <- data.frame(
+    suite = benchmark$suite,
+    task = benchmark$task,
+    case_count = nrow(benchmark$cases),
+    gold_count = nrow(benchmark$gold),
+    prediction_count = nrow(predictions),
+    elapsed_seconds = elapsed_seconds,
+    case_seconds = sum(timings$seconds),
+    token_count = sum(timings$token_count),
+    tokens_per_second = if (elapsed_seconds > 0) sum(timings$token_count) / elapsed_seconds else NA_real_,
+    cases_per_second = if (elapsed_seconds > 0) nrow(benchmark$cases) / elapsed_seconds else NA_real_,
+    prediction_bytes = sum(timings$prediction_bytes),
+    stringsAsFactors = FALSE
+  )
   out <- list(
     suite = benchmark$suite,
+    task = benchmark$task,
+    source = benchmark$source,
+    version = benchmark$version,
+    metadata = benchmark$metadata,
+    started_at = started_at,
+    finished_at = format(Sys.time(), "%Y-%m-%d %H:%M:%OS3%z"),
+    environment = ducksemantics_benchmark_environment(),
+    summary = summary,
     predictions = predictions,
     timings = timings,
+    case_metrics = case_metrics,
     metrics = metrics,
     index_stats = if (isTRUE(collect_index_stats)) ducksemantics_index_stats(conn, prefix = prefix) else NULL
   )
   class(out) <- c("ducksemantics_benchmark_result", "list")
   out
+}
+
+#' @export
+print.ducksemantics_benchmark_result <- function(x, ...) {
+  cat("<ducksemantics benchmark>\n")
+  cat("  suite: ", x$suite, "\n", sep = "")
+  cat("  task: ", x$task, "\n", sep = "")
+  cat("  cases: ", x$summary$case_count, "\n", sep = "")
+  cat("  elapsed: ", sprintf("%.3f s", x$summary$elapsed_seconds), "\n", sep = "")
+  cat("  F1: ", sprintf("%.3f", x$metrics$f1), "\n", sep = "")
+  invisible(x)
 }
 
 #' Compute benchmark precision and recall
@@ -2149,6 +2208,35 @@ ducksemantics_metric_keys <- function(x, by = "node") {
     return(unique(paste(case_id, node_id, as.character(x$span), sep = "\r")))
   }
   stop("Span metrics require `start_offset`/`end_offset` or `span` columns.", call. = FALSE)
+}
+
+ducksemantics_benchmark_case_metrics <- function(predictions, gold, case_ids) {
+  case_ids <- unique(as.character(case_ids))
+  rows <- lapply(case_ids, function(case_id) {
+    pred_i <- predictions[predictions$case_id == case_id, , drop = FALSE]
+    gold_i <- gold[gold$case_id == case_id, , drop = FALSE]
+    out <- ducksemantics_benchmark_metrics(pred_i, gold_i)
+    out$case_id <- case_id
+    out[, c("case_id", setdiff(names(out), "case_id")), drop = FALSE]
+  })
+  out <- do.call(rbind, rows)
+  row.names(out) <- NULL
+  out
+}
+
+ducksemantics_benchmark_environment <- function() {
+  packages <- c("ducksemantics", "duckdb", "DBI", "S7", "s7contract", "Rbebelm", "Rfmalloc")
+  versions <- vapply(packages, function(pkg) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      return(NA_character_)
+    }
+    as.character(utils::packageVersion(pkg))
+  }, character(1), USE.NAMES = TRUE)
+  list(
+    r_version = paste(R.version$major, R.version$minor, sep = "."),
+    platform = R.version$platform,
+    packages = as.list(versions)
+  )
 }
 
 ducksemantics_database_size <- function(conn) {

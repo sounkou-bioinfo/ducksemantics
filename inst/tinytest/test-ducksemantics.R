@@ -301,13 +301,20 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
       node_id = c("HP:0004322", "HP:0001250"),
       stringsAsFactors = FALSE
     ),
-    suite = "tiny-hpo"
+    suite = "tiny-hpo",
+    source = "tinytest",
+    version = "1"
   )
-  run <- benchmark |> ducksemantics_benchmark(conn)
-  expect_equal(run$metrics$tp, 2)
-  expect_equal(run$metrics$fp, 0)
-  expect_equal(run$metrics$fn, 0)
-  expect_equal(run$metrics$f1, 1)
+  result <- benchmark |> ducksemantics_benchmark(conn)
+  expect_equal(result$metrics$tp, 2)
+  expect_equal(result$metrics$fp, 0)
+  expect_equal(result$metrics$fn, 0)
+  expect_equal(result$metrics$f1, 1)
+  expect_equal(result$summary$case_count, 1L)
+  expect_equal(result$summary$gold_count, 2L)
+  expect_equal(result$case_metrics$case_id, "case-001")
+  expect_equal(result$source, "tinytest")
+  expect_true(is.list(result$environment$packages))
 
   stats <- ducksemantics_index_stats(conn)
   expect_true(any(stats$tables$table == "semantic_alias_index"))
