@@ -354,18 +354,32 @@
 <span>    node_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0001263"</span>, <span class="st">"HP:0001250"</span>, <span class="st">"HP:0004322"</span>, <span class="st">"HP:0001638"</span><span class="op">)</span>,</span>
 <span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span>  <span class="op">)</span>,</span>
-<span>  suite <span class="op">=</span> <span class="st">"readme-hpo-mondo"</span></span>
+<span>  suite <span class="op">=</span> <span class="st">"readme-hpo-mondo"</span>,</span>
+<span>  source <span class="op">=</span> <span class="st">"README.Rmd"</span>,</span>
+<span>  version <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"%Y-%m-%d"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">run</span> <span class="op">&lt;-</span> <span class="va">suite</span> <span class="op">|&gt;</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">suite</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="reference/ducksemantics_benchmark.html">ducksemantics_benchmark</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">run</span><span class="op">$</span><span class="va">metrics</span></span>
+<span><span class="va">result</span></span>
+<span><span class="co">#&gt; &lt;ducksemantics benchmark&gt;</span></span>
+<span><span class="co">#&gt;   suite: readme-hpo-mondo</span></span>
+<span><span class="co">#&gt;   task: grounding</span></span>
+<span><span class="co">#&gt;   cases: 1</span></span>
+<span><span class="co">#&gt;   elapsed: 0.120 s</span></span>
+<span><span class="co">#&gt;   F1: 0.727</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">summary</span></span>
+<span><span class="co">#&gt;              suite      task case_count gold_count prediction_count elapsed_seconds</span></span>
+<span><span class="co">#&gt; 1 readme-hpo-mondo grounding          1          4               13            0.12</span></span>
+<span><span class="co">#&gt;   case_seconds token_count tokens_per_second cases_per_second prediction_bytes</span></span>
+<span><span class="co">#&gt; 1        0.118          15               125         8.333333             6152</span></span>
+<span><span class="va">result</span><span class="op">$</span><span class="va">metrics</span></span>
 <span><span class="co">#&gt;     by tp fp fn precision recall        f1</span></span>
 <span><span class="co">#&gt; 1 node  4  3  0 0.5714286      1 0.7272727</span></span>
-<span><span class="va">run</span><span class="op">$</span><span class="va">timings</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"seconds"</span>, <span class="st">"token_count"</span>, <span class="st">"prediction_count"</span>, <span class="st">"prediction_bytes"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;           case_id seconds token_count prediction_count prediction_bytes</span></span>
-<span><span class="co">#&gt; 1 readme-case-001   0.082          15               13             6152</span></span></code></pre></div>
+<span><span class="va">result</span><span class="op">$</span><span class="va">timings</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"seconds"</span>, <span class="st">"token_count"</span>, <span class="st">"gold_count"</span>, <span class="st">"prediction_count"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;           case_id seconds token_count gold_count prediction_count</span></span>
+<span><span class="co">#&gt; 1 readme-case-001   0.118          15          4               13</span></span></code></pre></div>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">conn</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 </div>

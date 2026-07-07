@@ -5,7 +5,15 @@ Define benchmark cases
 ## Usage
 
 ``` r
-ducksemantics_benchmark_cases(cases, gold, suite = "semantic")
+ducksemantics_benchmark_cases(
+  cases,
+  gold,
+  suite = "semantic",
+  task = "grounding",
+  source = NULL,
+  version = NULL,
+  metadata = list()
+)
 ```
 
 ## Arguments
@@ -22,6 +30,22 @@ ducksemantics_benchmark_cases(cases, gold, suite = "semantic")
 - suite:
 
   Benchmark suite label.
+
+- task:
+
+  Benchmark task label.
+
+- source:
+
+  Optional source dataset label.
+
+- version:
+
+  Optional source dataset version.
+
+- metadata:
+
+  Optional named list of benchmark metadata.
 
 ## Value
 
