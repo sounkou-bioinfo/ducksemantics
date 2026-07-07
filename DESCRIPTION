@@ -28,10 +28,10 @@ Imports:
 Suggests:
     duckdb,
     jsonlite,
+    Rfmalloc,
     Rbebelm,
     tinytest
-Enhances:
-    Rfmalloc
 Remotes:
+    sounkou-bioinfo/Rfmalloc,
     sounkou-bioinfo/Rbebelm,
     sounkou-bioinfo/s7contract
