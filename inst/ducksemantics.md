@@ -2,16 +2,13 @@
 
 `ducksemantics` is the package. It owns a DuckDB-native semantic graph and
 grounding layer now: schema creation, graph writes, alias indexing, mention
-grounding, native DuckDB vector storage, token-embedding storage, embedding
-clusters, closure SQL, typed model-provider interfaces, and benchmark
+grounding, native DuckDB vector storage, native ColBERT token-vector storage,
+embedding clusters, closure SQL, typed model-provider interfaces, and benchmark
 measurement.
 
 HPO, MONDO, ORPHANET, study notes, memory, run ledgers, and local concept maps
-are graph sources that project into the same tables. ClinVar VCV/RCV XML is the
-same kind of source: a large clinical-variant assertion graph that should
-project into stable DuckDB tables before it projects into semantic nodes and
-edges. A future DuckDB extension can optimize hot paths, but the package API is
-not waiting on it.
+are graph sources that project into the same tables. A future DuckDB extension
+can optimize hot paths, but the package API is not waiting on it.
 
 ## Concrete Sources Being Abstracted
 
@@ -23,10 +20,9 @@ The abstraction closes over these existing shapes:
   ontology terms, memory links, and as-of observations are graph-as-SQL.
 - SemanticSQL: `statements`, `prefix`, generated `edge` views, and
   `entailed_edge` provide an ontology interchange shape.
-- Rbebelm/bebelm: local CPU model judgment and embedding can enrich, reject,
-  or explain deterministic candidates without owning the graph schema.
-- ClinVar XML: VCV/RCV releases become variant, assertion, trait, gene,
-  location, cross-reference, and semantic graph tables. See `inst/clinvar.md`.
+- Rbebelm: EmbeddingGemma dense retrieval, native ColBERT late interaction,
+  and local BebeLM judgment can enrich, reject, or explain deterministic
+  candidates without owning the graph schema.
 
 ## Core Tables
 
@@ -124,8 +120,6 @@ semantic_token_embeddings(
   end_offset INTEGER,
   dim INTEGER NOT NULL,
   embedding FLOAT[],
-  storage TEXT,
-  storage_ref TEXT,
   attrs TEXT
 );
 
@@ -153,10 +147,11 @@ semantic_embedding_centroids(
 );
 ```
 
-`semantic_token_embeddings` stores token-level matrices for exact
-late-interaction scoring. The pooled path in `semantic_embeddings` remains the
-cheap broad-rank layer; token matrices rerank candidate blocks with MaxSim when
-lexical, graph, or pooled-vector retrieval needs finer evidence.
+`semantic_token_embeddings` stores native ColBERT document token matrices for
+exact MaxSim. The EmbeddingGemma path in `semantic_embeddings` remains the
+cheap broad-rank layer; ColBERT reranks candidate blocks when lexical, graph,
+or dense retrieval needs finer evidence. DuckDB VSS/HNSW indexes the dense
+fixed-size vectors only; it is not a ColBERT late-interaction index.
 
 ## Interfaces
 
@@ -166,7 +161,8 @@ Provider extension points are structural S7 interfaces, following the
 - `DucksemanticsAnnotator`: grounds text against a semantic store.
 - `DucksemanticsPromptRunner`: sends a prompt to a model and returns text.
 - `DucksemanticsJudgmentParser`: parses model text into judgment rows.
-- `DucksemanticsEmbeddingProvider`: maps text to a numeric embedding matrix.
+- `DucksemanticsEmbeddingProvider`: maps text to a numeric dense embedding
+  matrix, with EmbeddingGemma as the native provider.
 
 Concrete providers can be BebeLM/Rbebelm, a test fixture, a cloud model, a
 future Rust index, or a different local embedding model. The consuming code
@@ -175,8 +171,8 @@ depends on the interface, not the provider.
 Store/query specs are S7 structs with property validators:
 
 - `DucksemanticsEmbeddingBatch`: rows to store in `semantic_embeddings`.
-- `DucksemanticsTokenEmbeddingBatch`: token rows grouped by `block_id` for
-  late-interaction scoring.
+- `DucksemanticsTokenEmbeddingBatch`: native ColBERT document-token rows
+  grouped by `block_id` for late-interaction scoring.
 - `DucksemanticsTokenEmbeddingQuery`: query token matrix and filters for exact
   MaxSim reranking over stored token blocks.
 - `DucksemanticsEmbeddingQuery`: vector search request over DuckDB arrays.
@@ -222,7 +218,7 @@ Benchmarking belongs to the package API. It should measure deterministic
 candidate generation, graph coverage, synonym handling, memory pressure,
 latency, embedding cost, embedding cluster structure, and model-assisted
 judgment. The lexical DuckDB matcher sets the transparent floor; benchmark
-failures decide where synonym expansion, vector reranking, late interaction,
+failures decide where synonym expansion, dense retrieval, ColBERT reranking,
 negation, uncertainty, and family-history adjudication actually improve HPO and
 MONDO tasks.
 

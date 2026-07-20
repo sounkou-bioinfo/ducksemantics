@@ -67,8 +67,9 @@ reference:
       - ducksemantics_token_embedding_provider
       - ducksemantics_json_judgment_parser
       - ducksemantics_bebel_runner
-      - ducksemantics_bebel_embedding_provider
-      - ducksemantics_bebel_token_embedding_provider
+      - ducksemantics_embeddinggemma_provider
+      - ducksemantics_colbert_provider
+      - ducksemantics_colbert_query
       - ducksemantics_bebel_tool_judgment_parser
   - title: Model Judgment
     contents:

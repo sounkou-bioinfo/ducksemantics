@@ -13,8 +13,7 @@ ducksemantics_embedding_cluster_spec(
   run_id = NULL,
   seed = 1L,
   nstart = 10L,
-  max_iter = 100L,
-  storage = c("r", "rfmalloc")
+  max_iter = 100L
 )
 }
 \arguments{
@@ -35,9 +34,6 @@ ducksemantics_embedding_cluster_spec(
 \item{nstart}{Number of starts used by \code{stats::kmeans()}.}
 
 \item{max_iter}{Maximum k-means iterations.}
-
-\item{storage}{Matrix storage for the clustering pass. \code{"r"} uses an ordinary
-R matrix. \code{"rfmalloc"} allocates the working matrix through Rfmalloc.}
 }
 \description{
 Construct an embedding clustering specification

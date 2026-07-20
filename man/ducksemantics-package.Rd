@@ -22,5 +22,10 @@ Useful links:
 \author{
 \strong{Maintainer}: Sounkou Mahamane Toure \email{sounkoutoure@gmail.com}
 
+Authors:
+\itemize{
+  \item Sounkou Mahamane Toure \email{sounkoutoure@gmail.com}
+}
+
 }
 \keyword{internal}

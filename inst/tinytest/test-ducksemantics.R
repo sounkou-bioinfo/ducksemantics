@@ -4,6 +4,7 @@ expect_true(any(grepl("semantic_aliases", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_judgments", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_embeddings", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_token_embeddings", schema, fixed = TRUE)))
+expect_false(any(grepl("storage_ref", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_embedding_clusters", schema, fixed = TRUE)))
 expect_true(any(grepl("semantic_embedding_centroids", schema, fixed = TRUE)))
 

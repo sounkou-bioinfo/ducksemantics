@@ -18,9 +18,9 @@ ducksemantics_late_interaction_search(query, conn, prefix = "semantic")
 Data frame ordered by descending MaxSim score.
 }
 \description{
-Scores stored token-embedding blocks with ColBERT-style MaxSim. For each
-query token, the scorer finds the best matching token in a candidate block
-and averages those maxima. This is the exact reranking primitive for
-candidate sets produced by lexical aliases, FTS, graph neighborhoods, or
-pooled-vector search.
+Scores stored native ColBERT document blocks with exact MaxSim. For each
+query token, the scorer finds the best matching document token and sums those
+maxima, matching \code{Rbebelm::colbert_maxsim()} once both matrices have been
+materialized. Use dense EmbeddingGemma/HNSW, aliases, FTS, or graph context
+to reduce large corpora before this reranker.
 }

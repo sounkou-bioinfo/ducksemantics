@@ -198,31 +198,52 @@ ducksemantics_function_token_embedding_provider_class <- S7::new_class(
   )
 )
 
-ducksemantics_bebel_embedding_provider_class <- S7::new_class(
-  "ducksemantics_bebel_embedding_provider",
-  package = "ducksemantics",
-  properties = list(
-    model = S7::class_any,
-    add_bos = S7::class_logical,
-    normalize = S7::class_logical,
-    pooling = S7::class_character,
-    token_batch_size = ducksemantics_positive_integer_property,
-    sequence_batch_size = ducksemantics_positive_integer_property,
-    check_interrupt = ducksemantics_flag_property
-  )
-)
-
-ducksemantics_bebel_token_embedding_provider_class <- S7::new_class(
-  "ducksemantics_bebel_token_embedding_provider",
+ducksemantics_embeddinggemma_provider_class <- S7::new_class(
+  "ducksemantics_embeddinggemma_provider",
   package = "ducksemantics",
   properties = list(
     model = S7::class_any,
     label = ducksemantics_text_property,
-    add_bos = S7::class_logical,
-    normalize = S7::class_logical,
-    token_batch_size = ducksemantics_positive_integer_property,
+    task = ducksemantics_text_property,
+    title = ducksemantics_optional_text_property,
+    dimensions = ducksemantics_positive_integer_property,
+    normalize = ducksemantics_flag_property,
+    truncate = ducksemantics_flag_property,
     check_interrupt = ducksemantics_flag_property
-  )
+  ),
+  validator = function(self) {
+    if (!S7::prop(self, "task") %in% c(
+      "retrieval_query", "retrieval_document", "question_answering",
+      "fact_verification", "classification", "clustering",
+      "semantic_similarity", "code_retrieval", "summarization", "raw"
+    )) {
+      return("@task must be an EmbeddingGemma task.")
+    }
+    if (!is.null(S7::prop(self, "title")) &&
+      !identical(S7::prop(self, "task"), "retrieval_document")) {
+      return("@title is valid only for @task = \"retrieval_document\".")
+    }
+    if (!S7::prop(self, "dimensions") %in% c(768, 512, 256, 128)) {
+      return("@dimensions must be one of 768, 512, 256, or 128.")
+    }
+    NULL
+  }
+)
+
+ducksemantics_colbert_provider_class <- S7::new_class(
+  "ducksemantics_colbert_provider",
+  package = "ducksemantics",
+  properties = list(
+    model = S7::class_any,
+    label = ducksemantics_text_property,
+    role = ducksemantics_text_property
+  ),
+  validator = function(self) {
+    if (!S7::prop(self, "role") %in% c("query", "document")) {
+      return('@role must be "query" or "document".')
+    }
+    NULL
+  }
 )
 
 ducksemantics_embedding_cache_spec_class <- S7::new_class(
@@ -291,74 +312,106 @@ ducksemantics_token_embedding_provider <- function(fun, label = "function-token"
   ducksemantics_function_token_embedding_provider_class(fun = fun, label = label)
 }
 
-#' Create a BebeLM embedding provider
+#' Create an EmbeddingGemma dense retrieval provider
 #'
-#' @param model A `Rbebelm` `BebelModel` object.
-#' @param add_bos Include BOS in tokenization?
-#' @param normalize L2-normalize embeddings?
-#' @param pooling Hidden-state pooling strategy: `mean` or `last`.
-#' @param token_batch_size Number of tokens per Rust batched prefill/matmul call.
-#' @param sequence_batch_size Number of texts per independent-sequence embedding
-#'   batch.
-#' @param check_interrupt Whether long embedding runs should poll R interrupts
-#'   between texts and token batches.
+#' @param model A `Rbebelm` `EmbeddingGemmaModel` object.
+#' @param label Provider label for stored dense vectors.
+#' @param task EmbeddingGemma task prompt. Use the same task for vectors that
+#'   will be compared; use the dedicated query/document tasks only as a matched
+#'   retrieval pair.
+#' @param title Optional document title, valid only for `retrieval_document`.
+#' @param dimensions Matryoshka dimension: 768, 512, 256, or 128.
+#' @param normalize L2-normalize output rows.
+#' @param truncate Truncate inputs longer than EmbeddingGemma's context.
+#' @param check_interrupt Poll for R interrupts between bounded native batches.
 #' @return An object implementing [DucksemanticsEmbeddingProvider].
 #' @export
-ducksemantics_bebel_embedding_provider <- function(model,
-                                                   add_bos = TRUE,
-                                                   normalize = TRUE,
-                                                   pooling = c("mean", "last"),
-                                                   token_batch_size = 512L,
-                                                   sequence_batch_size = 64L,
-                                                   check_interrupt = TRUE) {
+ducksemantics_embeddinggemma_provider <- function(model,
+                                                  label = "Rbebelm EmbeddingGemma",
+                                                  task = "semantic_similarity",
+                                                  title = NULL,
+                                                  dimensions = 768L,
+                                                  normalize = TRUE,
+                                                  truncate = TRUE,
+                                                  check_interrupt = TRUE) {
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
-    stop("Rbebelm is required for the BebeLM embedding provider.", call. = FALSE)
+    stop("Rbebelm is required for the EmbeddingGemma provider.", call. = FALSE)
   }
-  S7::prop(DucksemanticsFlag(value = add_bos), "value")
-  S7::prop(DucksemanticsFlag(value = normalize), "value")
-  pooling <- match.arg(pooling)
-  ducksemantics_bebel_embedding_provider_class(
+  ducksemantics_embeddinggemma_provider_class(
     model = model,
-    add_bos = add_bos,
+    label = label,
+    task = task,
+    title = title,
+    dimensions = dimensions,
     normalize = normalize,
-    pooling = pooling,
-    token_batch_size = token_batch_size,
-    sequence_batch_size = sequence_batch_size,
+    truncate = truncate,
     check_interrupt = check_interrupt
   )
 }
 
-#' Create a BebeLM token embedding provider
+#' Create a native ColBERT token-vector provider
 #'
-#' @param model A `Rbebelm` `BebelModel` object.
-#' @param label Provider label for stored token rows.
-#' @param add_bos Include BOS in tokenization? Defaults to `FALSE` for
-#'   late-interaction scoring.
-#' @param normalize L2-normalize token embeddings?
-#' @param token_batch_size Number of tokens per Rust batched prefill/matmul call.
-#' @param check_interrupt Whether long token embedding runs should poll R
-#'   interrupts between token batches.
-#' @return An object implementing `DucksemanticsTokenEmbeddingProvider`.
+#' `role = "document"` is for ontology labels, definitions, and candidate
+#' passages stored in DuckDB. `role = "query"` is for text being searched. The
+#' native encoder owns the distinct prefixes, token limits, projection, and L2
+#' normalization required by the model; no causal BebeLM hidden states are used.
+#'
+#' @param model A `Rbebelm` `ColbertModel` object.
+#' @param role Whether this provider encodes retrieval `"query"` or
+#'   `"document"` text.
+#' @param label Provider label. Document rows and their query must share it.
+#' @return An object implementing [DucksemanticsTokenEmbeddingProvider].
 #' @export
-ducksemantics_bebel_token_embedding_provider <- function(model,
-                                                         label = "Rbebelm token",
-                                                         add_bos = FALSE,
-                                                         normalize = TRUE,
-                                                         token_batch_size = 512L,
-                                                         check_interrupt = TRUE) {
+ducksemantics_colbert_provider <- function(model,
+                                           role = c("document", "query"),
+                                           label = "Rbebelm ColBERT") {
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
-    stop("Rbebelm is required for the BebeLM token embedding provider.", call. = FALSE)
+    stop("Rbebelm is required for the ColBERT provider.", call. = FALSE)
   }
-  S7::prop(DucksemanticsScalarText(value = label), "value")
-  S7::prop(DucksemanticsFlag(value = add_bos), "value")
-  S7::prop(DucksemanticsFlag(value = normalize), "value")
-  ducksemantics_bebel_token_embedding_provider_class(
+  ducksemantics_colbert_provider_class(
     model = model,
-    label = label,
-    add_bos = add_bos,
-    normalize = normalize,
-    token_batch_size = token_batch_size,
-    check_interrupt = check_interrupt
+    role = match.arg(role),
+    label = label
+  )
+}
+
+#' Construct a ColBERT late-interaction query
+#'
+#' Encodes text with the profile's query contract and returns a query object
+#' directly consumable by [ducksemantics_late_interaction_search()]. Candidate
+#' blocks must have been stored from a ColBERT document provider with the same
+#' `label`.
+#'
+#' @param model A `Rbebelm` `ColbertModel` object.
+#' @param text Non-empty query text.
+#' @param provider Stored document provider label.
+#' @param subject_kind Optional candidate subject-kind filter.
+#' @param top_k Number of candidate blocks to return.
+#' @param table Optional token-embedding table.
+#' @param candidate_subject_id Optional candidate subject identifiers.
+#' @return A [DucksemanticsTokenEmbeddingQuery].
+#' @export
+ducksemantics_colbert_query <- function(model,
+                                        text,
+                                        provider = "Rbebelm ColBERT",
+                                        subject_kind = NULL,
+                                        top_k = 10L,
+                                        table = NULL,
+                                        candidate_subject_id = NULL) {
+  if (!requireNamespace("Rbebelm", quietly = TRUE)) {
+    stop("Rbebelm is required for the ColBERT query encoder.", call. = FALSE)
+  }
+  if (!is.character(text) || length(text) != 1L || is.na(text) || !nzchar(text)) {
+    stop("`text` must be a non-empty character scalar.", call. = FALSE)
+  }
+  query <- Rbebelm::colbert_encode_query(model, text)
+  ducksemantics_token_embedding_query(
+    embeddings = Rbebelm::colbert_embedding_vectors(query),
+    provider = provider,
+    subject_kind = subject_kind,
+    top_k = top_k,
+    table = table,
+    candidate_subject_id = candidate_subject_id
   )
 }
 
@@ -414,18 +467,18 @@ S7::method(ducksemantics_embed, ducksemantics_function_embedding_provider_class)
   S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
 }
 
-S7::method(ducksemantics_embed, ducksemantics_bebel_embedding_provider_class) <- function(provider, text, ...) {
+S7::method(ducksemantics_embed, ducksemantics_embeddinggemma_provider_class) <- function(provider, text, ...) {
   if (!is.character(text) || anyNA(text)) {
     stop("`text` must be a character vector without NA.", call. = FALSE)
   }
-  out <- Rbebelm::bebel_embed(
+  out <- Rbebelm::embeddinggemma_embed(
     provider@model,
     text,
-    add_bos = provider@add_bos,
+    task = provider@task,
+    title = provider@title,
+    dimensions = provider@dimensions,
     normalize = provider@normalize,
-    pooling = provider@pooling,
-    token_batch_size = provider@token_batch_size,
-    sequence_batch_size = provider@sequence_batch_size,
+    truncate = provider@truncate,
     check_interrupt = provider@check_interrupt
   )
   S7::prop(DucksemanticsEmbeddingMatrix(embeddings = out, rows = length(text)), "embeddings")
@@ -442,27 +495,30 @@ S7::method(ducksemantics_token_embed, ducksemantics_function_token_embedding_pro
   out
 }
 
-S7::method(ducksemantics_token_embed, ducksemantics_bebel_token_embedding_provider_class) <- function(provider, text, ...) {
-  if (!is.character(text) || anyNA(text)) {
-    stop("`text` must be a character vector without NA.", call. = FALSE)
+S7::method(ducksemantics_token_embed, ducksemantics_colbert_provider_class) <- function(provider, text, ...) {
+  if (!is.character(text) || anyNA(text) || any(!nzchar(text))) {
+    stop("`text` must be a non-empty character vector without NA.", call. = FALSE)
   }
   lapply(text, function(one) {
-    Rbebelm::bebel_token_embed(
-      provider@model,
-      one,
-      add_bos = provider@add_bos,
-      normalize = provider@normalize,
-      token_batch_size = provider@token_batch_size,
-      check_interrupt = provider@check_interrupt
+    encoded <- if (identical(provider@role, "query")) {
+      Rbebelm::colbert_encode_query(provider@model, one)
+    } else {
+      Rbebelm::colbert_encode_document(provider@model, one)
+    }
+    ids <- Rbebelm::colbert_embedding_ids(encoded)
+    list(
+      embeddings = Rbebelm::colbert_embedding_vectors(encoded),
+      token_index = seq_along(ids) - 1L,
+      tokens = paste0("token_id:", ids)
     )
   })
 }
 
 #' Cache provider embeddings in durable chunks
 #'
-#' This is the embedding cache used for large ontology passes. Each chunk is
-#' written after it finishes, so interrupted runs can resume without discarding
-#' completed BebeLM work.
+#' This cache is used for large ontology passes. Each chunk is written after it
+#' finishes, so interrupted runs can resume without discarding completed native
+#' retrieval-encoder work.
 #'
 #' @param text Character vector to embed.
 #' @param provider Object implementing [DucksemanticsEmbeddingProvider].

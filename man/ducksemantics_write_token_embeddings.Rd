@@ -26,8 +26,8 @@ before inserting?}
 Invisibly, the written token embedding rows.
 }
 \description{
-Token embeddings are grouped by \code{block_id}, so a later native scorer can
-compare query-token and document-token matrices without changing the graph
-schema. The first active embedding path remains pooled vectors in
-\code{semantic_embeddings}.
+Native ColBERT document vectors are grouped by \code{block_id}, so exact MaxSim
+can compare a query-token matrix to a stored candidate matrix without
+changing the graph schema. Dense vectors in \code{semantic_embeddings} remain the
+inexpensive broad-retrieval layer.
 }

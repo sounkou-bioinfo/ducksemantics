@@ -8,8 +8,7 @@ ducksemantics_cluster_embeddings(
   spec,
   conn,
   prefix = "semantic",
-  replace = TRUE,
-  rfmalloc_runtime = NULL
+  replace = TRUE
 )
 }
 \arguments{
@@ -21,9 +20,6 @@ ducksemantics_cluster_embeddings(
 \item{prefix}{Prefix used for semantic tables.}
 
 \item{replace}{Delete rows for \code{spec$run_id} before writing?}
-
-\item{rfmalloc_runtime}{Optional Rfmalloc runtime used when
-\code{storage = "rfmalloc"}.}
 }
 \value{
 A list with assignments, centroids, summary, and the \code{kmeans} object.

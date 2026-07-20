@@ -1,4 +1,4 @@
-DUCKSEMANTICS_SCHEMA_VERSION <- "ducksemantics.schema.v0"
+DUCKSEMANTICS_SCHEMA_VERSION <- "ducksemantics.schema.v1"
 
 #' DuckDB semantic graph schema
 #'
@@ -135,8 +135,6 @@ ducksemantics_schema_sql <- function(prefix = "semantic") {
       "end_offset INTEGER, ",
       "dim INTEGER NOT NULL, ",
       "embedding FLOAT[], ",
-      "storage TEXT, ",
-      "storage_ref TEXT, ",
       "attrs TEXT",
       ")"
     ),
@@ -881,10 +879,10 @@ ducksemantics_write_embeddings <- function(batch,
 
 #' Store token embeddings for late-interaction scoring
 #'
-#' Token embeddings are grouped by `block_id`, so a later native scorer can
-#' compare query-token and document-token matrices without changing the graph
-#' schema. The first active embedding path remains pooled vectors in
-#' `semantic_embeddings`.
+#' Native ColBERT document vectors are grouped by `block_id`, so exact MaxSim
+#' can compare a query-token matrix to a stored candidate matrix without
+#' changing the graph schema. Dense vectors in `semantic_embeddings` remain the
+#' inexpensive broad-retrieval layer.
 #'
 #' @param batch A `DucksemanticsTokenEmbeddingBatch` object from
 #'   `ducksemantics_token_embedding_batch()`.
@@ -928,11 +926,11 @@ ducksemantics_write_token_embeddings <- function(batch,
 
 #' Search token embeddings with exact late interaction
 #'
-#' Scores stored token-embedding blocks with ColBERT-style MaxSim. For each
-#' query token, the scorer finds the best matching token in a candidate block
-#' and averages those maxima. This is the exact reranking primitive for
-#' candidate sets produced by lexical aliases, FTS, graph neighborhoods, or
-#' pooled-vector search.
+#' Scores stored native ColBERT document blocks with exact MaxSim. For each
+#' query token, the scorer finds the best matching document token and sums those
+#' maxima, matching `Rbebelm::colbert_maxsim()` once both matrices have been
+#' materialized. Use dense EmbeddingGemma/HNSW, aliases, FTS, or graph context
+#' to reduce large corpora before this reranker.
 #'
 #' @param query A `DucksemanticsTokenEmbeddingQuery` object from
 #'   `ducksemantics_token_embedding_query()`.
@@ -959,8 +957,7 @@ ducksemantics_late_interaction_search <- function(query,
   table <- S7::prop(DucksemanticsSqlIdentifier(value = table, qualified = TRUE), "value")
   filters <- c(
     paste0("dim = ", dim),
-    "embedding IS NOT NULL",
-    "storage = 'duckdb_float_array'"
+    "embedding IS NOT NULL"
   )
   if (!is.null(provider)) {
     filters <- c(filters, paste0("provider = ", ducksemantics_quote_string(provider)))
@@ -991,6 +988,7 @@ ducksemantics_late_interaction_search <- function(query,
     provider = character(),
     dim = integer(),
     score = numeric(),
+    score_mean = numeric(),
     score_sum = numeric(),
     query_token_count = integer(),
     candidate_token_count = integer(),
@@ -1018,7 +1016,8 @@ ducksemantics_late_interaction_search <- function(query,
       subject_kind = rows$subject_kind[[idx[[1L]]]],
       provider = rows$provider[[idx[[1L]]]],
       dim = dim,
-      score = mean(best_scores),
+      score = sum(best_scores),
+      score_mean = mean(best_scores),
       score_sum = sum(best_scores),
       query_token_count = nrow(query_embeddings),
       candidate_token_count = length(idx),
@@ -1164,15 +1163,12 @@ ducksemantics_materialize_embedding_index <- function(spec,
 #' @param conn DBI connection.
 #' @param prefix Prefix used for semantic tables.
 #' @param replace Delete rows for `spec$run_id` before writing?
-#' @param rfmalloc_runtime Optional Rfmalloc runtime used when
-#'   `storage = "rfmalloc"`.
 #' @return A list with assignments, centroids, summary, and the `kmeans` object.
 #' @export
 ducksemantics_cluster_embeddings <- function(spec,
                                              conn,
                                              prefix = "semantic",
-                                             replace = TRUE,
-                                             rfmalloc_runtime = NULL) {
+                                             replace = TRUE) {
   if (!S7::S7_inherits(spec, DucksemanticsEmbeddingClusterSpec)) {
     spec <- ducksemantics_embedding_cluster_spec(spec)
   }
@@ -1192,12 +1188,7 @@ ducksemantics_cluster_embeddings <- function(spec,
   if (k >= nrow(rows)) {
     stop("`k` must be smaller than the number of matched embedding rows.", call. = FALSE)
   }
-  x <- ducksemantics_embedding_column_matrix(
-    rows$embedding,
-    dimensions,
-    storage = S7::prop(spec, "storage"),
-    rfmalloc_runtime = rfmalloc_runtime
-  )
+  x <- ducksemantics_embedding_column_matrix(rows$embedding, dimensions)
 
   seed <- as.integer(S7::prop(spec, "seed"))
   old_seed <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
@@ -1827,14 +1818,11 @@ ducksemantics_token_embedding_rows <- function(batch) {
   token <- S7::prop(batch, "token")
   start_offset <- S7::prop(batch, "start_offset")
   end_offset <- S7::prop(batch, "end_offset")
-  storage <- S7::prop(batch, "storage")
-  storage_ref <- S7::prop(batch, "storage_ref")
   attrs <- S7::prop(batch, "attrs")
   n <- nrow(embeddings)
   if (is.null(token)) token <- NA_character_
   if (is.null(start_offset)) start_offset <- NA_integer_
   if (is.null(end_offset)) end_offset <- NA_integer_
-  if (is.null(storage_ref)) storage_ref <- NA_character_
   if (is.null(attrs)) attrs <- NA_character_
   rows <- data.frame(
     block_id = block_id,
@@ -1846,16 +1834,13 @@ ducksemantics_token_embedding_rows <- function(batch) {
     start_offset = rep(as.integer(start_offset), length.out = n),
     end_offset = rep(as.integer(end_offset), length.out = n),
     dim = rep(ncol(embeddings), n),
-    storage = rep(storage, n),
-    storage_ref = rep(storage_ref, length.out = n),
     attrs = rep(attrs, length.out = n),
     stringsAsFactors = FALSE
   )
   rows$embedding <- I(lapply(seq_len(n), function(i) as.single(embeddings[i, ])))
   rows[, c(
     "block_id", "subject_id", "subject_kind", "provider", "token_index",
-    "token", "start_offset", "end_offset", "dim", "embedding", "storage",
-    "storage_ref", "attrs"
+    "token", "start_offset", "end_offset", "dim", "embedding", "attrs"
   )]
 }
 
@@ -1887,17 +1872,9 @@ ducksemantics_embedding_table_rows <- function(conn, spec, prefix = "semantic") 
   )
 }
 
-ducksemantics_embedding_column_matrix <- function(embedding,
-                                                  dimensions,
-                                                  storage = "r",
-                                                  rfmalloc_runtime = NULL) {
+ducksemantics_embedding_column_matrix <- function(embedding, dimensions) {
   if (is.matrix(embedding) && ncol(embedding) == dimensions) {
-    if (identical(storage, "rfmalloc")) {
-      x <- ducksemantics_allocate_matrix(nrow(embedding), dimensions, storage, rfmalloc_runtime)
-      x[,] <- embedding
-    } else {
-      x <- embedding
-    }
+    x <- embedding
   } else {
     rows <- if (is.list(embedding)) {
       lapply(embedding, function(value) as.numeric(unlist(value, use.names = FALSE)))
@@ -1908,14 +1885,12 @@ ducksemantics_embedding_column_matrix <- function(embedding,
     if (length(bad)) {
       stop("Embedding row ", bad[[1L]], " does not match dimension ", dimensions, ".", call. = FALSE)
     }
-    x <- ducksemantics_allocate_matrix(length(rows), dimensions, storage, rfmalloc_runtime)
+    x <- matrix(0, nrow = length(rows), ncol = dimensions)
     for (i in seq_along(rows)) {
       x[i, ] <- rows[[i]]
     }
   }
-  if (identical(storage, "r")) {
-    storage.mode(x) <- "double"
-  }
+  storage.mode(x) <- "double"
   if (anyNA(x) || any(!is.finite(x))) {
     stop("Embedding rows must contain only finite non-missing values.", call. = FALSE)
   }
@@ -1929,20 +1904,6 @@ ducksemantics_l2_normalize_rows <- function(x) {
   good <- is.finite(norms) & norms > 0
   x[good, ] <- x[good, , drop = FALSE] / norms[good]
   x
-}
-
-ducksemantics_allocate_matrix <- function(nrow, ncol, storage, rfmalloc_runtime = NULL) {
-  if (identical(storage, "r")) {
-    return(matrix(0, nrow = nrow, ncol = ncol))
-  }
-  if (!requireNamespace("Rfmalloc", quietly = TRUE)) {
-    stop("Rfmalloc is required when clustering storage is `rfmalloc`.", call. = FALSE)
-  }
-  if (is.null(rfmalloc_runtime)) {
-    Rfmalloc::create_fmalloc_matrix("numeric", nrow = nrow, ncol = ncol)
-  } else {
-    Rfmalloc::create_fmalloc_matrix("numeric", nrow = nrow, ncol = ncol, runtime = rfmalloc_runtime)
-  }
 }
 
 ducksemantics_cluster_assignment_rows <- function(rows, x, fit, run_id) {
@@ -2354,7 +2315,7 @@ ducksemantics_benchmark_case_metrics <- function(predictions, gold, case_ids) {
 }
 
 ducksemantics_benchmark_environment <- function() {
-  packages <- c("ducksemantics", "duckdb", "DBI", "S7", "s7contract", "Rbebelm", "Rfmalloc")
+  packages <- c("ducksemantics", "duckdb", "DBI", "S7", "s7contract", "Rbebelm")
   versions <- vapply(packages, function(pkg) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
       return(NA_character_)

@@ -14,8 +14,6 @@ DucksemanticsTokenEmbeddingBatch(
   token = NULL,
   start_offset = NULL,
   end_offset = NULL,
-  storage = character(0),
-  storage_ref = NULL,
   attrs = NULL
 )
 }
@@ -39,12 +37,6 @@ zero-based order within \code{subject_id}.}
 
 \item{start_offset, end_offset}{Optional zero-based source offsets.}
 
-\item{storage}{Storage label. \code{"duckdb_float_array"} means \code{embedding}
-stores each token row directly in DuckDB. \code{"rfmalloc_slab"} is reserved for
-native slabs addressed by \code{storage_ref}.}
-
-\item{storage_ref}{Optional native storage reference.}
-
 \item{attrs}{Optional JSON text or other metadata for each token row.}
 }
 \value{
@@ -52,4 +44,8 @@ A \code{DucksemanticsTokenEmbeddingBatch} object.
 }
 \description{
 Token embedding batch for late-interaction storage
+}
+\details{
+Token vectors are always persisted as DuckDB \code{FLOAT[]} rows. This
+makes the index durable and queryable without an external allocator.
 }

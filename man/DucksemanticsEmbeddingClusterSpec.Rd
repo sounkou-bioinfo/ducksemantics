@@ -13,8 +13,7 @@ DucksemanticsEmbeddingClusterSpec(
   run_id = character(0),
   seed = integer(0),
   nstart = integer(0),
-  max_iter = integer(0),
-  storage = character(0)
+  max_iter = integer(0)
 )
 }
 \arguments{
@@ -35,13 +34,14 @@ DucksemanticsEmbeddingClusterSpec(
 \item{nstart}{Number of starts used by \code{stats::kmeans()}.}
 
 \item{max_iter}{Maximum k-means iterations.}
-
-\item{storage}{Matrix storage for the clustering pass. \code{"r"} uses an ordinary
-R matrix. \code{"rfmalloc"} allocates the working matrix through Rfmalloc.}
 }
 \value{
 A \code{DucksemanticsEmbeddingClusterSpec} object.
 }
 \description{
 Embedding clustering specification
+}
+\details{
+Clustering always materializes an ordinary finite R matrix from the
+DuckDB \code{FLOAT[]} rows.
 }

@@ -269,11 +269,9 @@ ducksemantics_embedding_batch <- function(embeddings,
 #'   `provider`, `subject_kind`, and `subject_id`.
 #' @param token Optional token text for each row.
 #' @param start_offset,end_offset Optional zero-based source offsets.
-#' @param storage Storage label. `"duckdb_float_array"` means `embedding`
-#'   stores each token row directly in DuckDB. `"rfmalloc_slab"` is reserved for
-#'   native slabs addressed by `storage_ref`.
-#' @param storage_ref Optional native storage reference.
 #' @param attrs Optional JSON text or other metadata for each token row.
+#' @details Token vectors are always persisted as DuckDB `FLOAT[]` rows. This
+#'   makes the index durable and queryable without an external allocator.
 #' @return A `DucksemanticsTokenEmbeddingBatch` object.
 #' @export
 DucksemanticsTokenEmbeddingBatch <- S7::new_class(
@@ -289,8 +287,6 @@ DucksemanticsTokenEmbeddingBatch <- S7::new_class(
     token = ducksemantics_optional_text_property,
     start_offset = S7::new_union(NULL, S7::class_numeric),
     end_offset = S7::new_union(NULL, S7::class_numeric),
-    storage = ducksemantics_text_property,
-    storage_ref = ducksemantics_optional_text_property,
     attrs = ducksemantics_optional_text_property
   ),
   validator = function(self) {
@@ -309,11 +305,7 @@ DucksemanticsTokenEmbeddingBatch <- S7::new_class(
       any(token_index != as.integer(token_index))) {
       return("@token_index must contain one non-negative integer value per token row")
     }
-    storage <- S7::prop(self, "storage")
-    if (!storage %in% c("duckdb_float_array", "rfmalloc_slab")) {
-      return('@storage must be "duckdb_float_array" or "rfmalloc_slab"')
-    }
-    for (field in c("token", "storage_ref", "attrs")) {
+    for (field in c("token", "attrs")) {
       value <- S7::prop(self, field)
       if (!is.null(value) && !(length(value) %in% c(1L, n))) {
         return(paste0("@", field, " must be NULL, length 1, or one value per token row"))
@@ -345,8 +337,6 @@ ducksemantics_token_embedding_batch <- function(embeddings,
                                                 token = NULL,
                                                 start_offset = NULL,
                                                 end_offset = NULL,
-                                                storage = c("duckdb_float_array", "rfmalloc_slab"),
-                                                storage_ref = NULL,
                                                 attrs = NULL) {
   embeddings <- as.matrix(embeddings)
   storage.mode(embeddings) <- "double"
@@ -375,8 +365,6 @@ ducksemantics_token_embedding_batch <- function(embeddings,
     token = if (is.null(token)) NULL else as.character(token),
     start_offset = if (is.null(start_offset)) NULL else as.integer(start_offset),
     end_offset = if (is.null(end_offset)) NULL else as.integer(end_offset),
-    storage = match.arg(storage),
-    storage_ref = if (is.null(storage_ref)) NULL else as.character(storage_ref),
     attrs = if (is.null(attrs)) NULL else as.character(attrs)
   )
 }
@@ -414,7 +402,7 @@ ducksemantics_token_embedding_batch_from_provider <- function(text,
   }
   S7::prop(DucksemanticsScalarText(value = subject_kind), "value")
   if (is.null(provider_label)) {
-    provider_label <- if (S7::S7_inherits(provider, ducksemantics_bebel_token_embedding_provider_class) ||
+    provider_label <- if (S7::S7_inherits(provider, ducksemantics_colbert_provider_class) ||
       S7::S7_inherits(provider, ducksemantics_function_token_embedding_provider_class)) {
       provider@label
     } else {
@@ -684,9 +672,9 @@ ducksemantics_embedding_index_spec <- function(dimensions,
 #' @param seed Random seed used by `stats::kmeans()`.
 #' @param nstart Number of starts used by `stats::kmeans()`.
 #' @param max_iter Maximum k-means iterations.
-#' @param storage Matrix storage for the clustering pass. `"r"` uses an ordinary
-#'   R matrix. `"rfmalloc"` allocates the working matrix through Rfmalloc.
 #' @return A `DucksemanticsEmbeddingClusterSpec` object.
+#' @details Clustering always materializes an ordinary finite R matrix from the
+#'   DuckDB `FLOAT[]` rows.
 #' @export
 DucksemanticsEmbeddingClusterSpec <- S7::new_class(
   "DucksemanticsEmbeddingClusterSpec",
@@ -700,8 +688,7 @@ DucksemanticsEmbeddingClusterSpec <- S7::new_class(
     run_id = ducksemantics_text_property,
     seed = ducksemantics_positive_integer_property,
     nstart = ducksemantics_positive_integer_property,
-    max_iter = ducksemantics_positive_integer_property,
-    storage = ducksemantics_text_property
+    max_iter = ducksemantics_positive_integer_property
   ),
   validator = function(self) {
     for (field in c("provider", "subject_kind", "table")) {
@@ -723,10 +710,6 @@ DucksemanticsEmbeddingClusterSpec <- S7::new_class(
       }, error = function(e) "@table must be a valid SQL identifier")
       if (!is.null(invalid)) return(invalid)
     }
-    storage <- S7::prop(self, "storage")
-    if (!storage %in% c("r", "rfmalloc")) {
-      return('@storage must be "r" or "rfmalloc"')
-    }
     NULL
   }
 )
@@ -743,8 +726,7 @@ ducksemantics_embedding_cluster_spec <- function(k,
                                                  run_id = NULL,
                                                  seed = 1L,
                                                  nstart = 10L,
-                                                 max_iter = 100L,
-                                                 storage = c("r", "rfmalloc")) {
+                                                 max_iter = 100L) {
   if (is.null(run_id)) {
     run_id <- paste0("embedding-cluster:", format(Sys.time(), "%Y%m%d%H%M%OS3"))
   }
@@ -757,7 +739,6 @@ ducksemantics_embedding_cluster_spec <- function(k,
     run_id = run_id,
     seed = seed,
     nstart = nstart,
-    max_iter = max_iter,
-    storage = match.arg(storage)
+    max_iter = max_iter
   )
 }
