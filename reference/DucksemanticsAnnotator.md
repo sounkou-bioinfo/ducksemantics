@@ -8,8 +8,3 @@ rows. The default implementation is the DuckDB lexical alias index.
 ``` r
 DucksemanticsAnnotator
 ```
-
-## Format
-
-An object of class `s7contract::s7_interface` (inherits from
-`S7_object`) of length 1.

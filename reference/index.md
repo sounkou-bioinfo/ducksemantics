@@ -119,10 +119,12 @@
   : Create the default JSON judgment parser
 - [`ducksemantics_bebel_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_runner.md)
   : Create a BebeLM prompt runner
-- [`ducksemantics_bebel_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_embedding_provider.md)
-  : Create a BebeLM embedding provider
-- [`ducksemantics_bebel_token_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_token_embedding_provider.md)
-  : Create a BebeLM token embedding provider
+- [`ducksemantics_embeddinggemma_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embeddinggemma_provider.md)
+  : Create an EmbeddingGemma dense retrieval provider
+- [`ducksemantics_colbert_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_provider.md)
+  : Create a native ColBERT token-vector provider
+- [`ducksemantics_colbert_query()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_query.md)
+  : Construct a ColBERT late-interaction query
 - [`ducksemantics_bebel_tool_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_tool_judgment_parser.md)
   : Create a BebeLM tool-call judgment parser
 

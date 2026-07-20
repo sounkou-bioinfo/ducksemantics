@@ -1,445 +1,154 @@
 # ducksemantics
 
-`ducksemantics` is a DuckDB-native semantic graph and grounding package
-for R. The package owns the graph schema, OBO import, alias indexing,
-mention grounding, provider interfaces, model judgment, and benchmark
-measurement.
+`ducksemantics` is a DuckDB-native semantic graph and evidence-grounding
+package for R. It stores ontology nodes, aliases, graph edges, dense
+vectors, and native ColBERT document token vectors in one auditable
+DuckDB database.
 
-HPO and MONDO are first-class graph sources here, but they are not the
-whole abstraction. The same tables can hold ORPHANET, study notes,
-pi-bio-agent memory edges, run ledgers, and local concept maps.
-BebeLM/Rbebelm is the bundled on-device provider for CPU embedding and
-judgment; other providers implement the same S7 generics.
+It uses the dedicated Rbebelm model surfaces rather than causal
+generator hidden states:
 
-``` r
+- **EmbeddingGemma** provides dense, task-prompted vectors for broad
+  retrieval and optional DuckDB HNSW candidate generation.
+- **LFM2.5-ColBERT** provides exact late-interaction MaxSim reranking of
+  stored candidate documents.
+- **BebeLM** provides local structured judgment of deterministic
+  candidates, including negation, uncertainty, family history, and
+  subject context.
 
-suppressPackageStartupMessages({
-  library(ducksemantics)
-  library(Rbebelm)
-  library(Rfmalloc)
-})
+HPO, MONDO, ORPHANET, and local knowledge graphs are sources for the
+same graph schema, not special-purpose APIs.
 
-cache_dir <- tools::R_user_dir("ducksemantics", "cache")
-
-ontology_files <- c(
-  HPO = ducksemantics_cache_file(
-    "https://purl.obolibrary.org/obo/hp.obo",
-    "hp.obo",
-    cache_dir = cache_dir
-  ),
-  MONDO = ducksemantics_cache_file(
-    "https://purl.obolibrary.org/obo/mondo.obo",
-    "mondo.obo",
-    cache_dir = cache_dir
-  )
-)
-
-weights_file <- Sys.getenv(
-  "BEBELM_WEIGHTS_FILE",
-  "/root/bebelm/LFM2.5-8B-A1B-Q4_K_M.gguf"
-)
-stopifnot(file.exists(weights_file))
-```
-
-The OBO parser produces the graph rows that DuckDB stores and indexes.
+## Build a semantic graph
 
 ``` r
 
-graphs <- list(
-  HPO = ducksemantics_read_obo(ontology_files[["HPO"]], family = "HPO", source = "hp.obo"),
-  MONDO = ducksemantics_read_obo(ontology_files[["MONDO"]], family = "MONDO", source = "mondo.obo")
-)
+library(ducksemantics)
 
-data.frame(
-  source = names(graphs),
-  nodes = vapply(graphs, function(x) nrow(x$nodes), integer(1)),
-  aliases = vapply(graphs, function(x) nrow(x$aliases), integer(1)),
-  edges = vapply(graphs, function(x) nrow(x$edges), integer(1)),
-  row.names = NULL
-)
-#>   source nodes aliases  edges
-#> 1    HPO 19836   46065  24378
-#> 2  MONDO 56273  149279 115738
-```
-
-The database below is rebuilt from those full ontologies, then indexed
-once for lexical grounding.
-
-``` r
-
-db_path <- file.path(cache_dir, "readme.duckdb")
-unlink(db_path)
-
-conn <- ducksemantics_connect(db_path)
+conn <- ducksemantics_connect("semantic.duckdb")
+hpo <- ducksemantics_read_obo("hp.obo", family = "HPO", source = "hp.obo")
 ducksemantics_write_graph(
   conn,
-  nodes = graphs$HPO$nodes,
-  aliases = graphs$HPO$aliases,
-  edges = graphs$HPO$edges,
-  replace = TRUE,
-  index = FALSE
+  nodes = hpo$nodes,
+  aliases = hpo$aliases,
+  edges = hpo$edges,
+  replace = TRUE
 )
-ducksemantics_write_graph(
+
+# Deterministic, explainable candidates. This intentionally includes negated
+# mentions; BebeLM judgment decides whether the mention is a patient finding.
+mentions <- ducksemantics_annotate(
   conn,
-  nodes = graphs$MONDO$nodes,
-  aliases = graphs$MONDO$aliases,
-  edges = graphs$MONDO$edges,
-  index = TRUE
+  "The proband has short stature and seizures but no diabetes mellitus.",
+  document_id = "case-001"
 )
-
-ducksemantics_index_stats(conn)$tables
-#>                           table row_count
-#> 1                semantic_nodes     71333
-#> 2              semantic_aliases    195344
-#> 3          semantic_alias_index    195344
-#> 4                semantic_edges    140110
-#> 5       semantic_entailed_edges         0
-#> 6             semantic_mentions         0
-#> 7            semantic_judgments         0
-#> 8           semantic_embeddings         0
-#> 9     semantic_token_embeddings         0
-#> 10  semantic_embedding_clusters         0
-#> 11 semantic_embedding_centroids         0
 ```
 
-Grounding returns deterministic candidates with source provenance. The
-diabetes mention is deliberately negated; the lexical layer should
-surface it, and the judgment layer should decide whether it belongs in
-the patient phenotype.
+## Dense retrieval with EmbeddingGemma
+
+Use a retrieval-trained dense encoder for broad candidate generation.
+Choose an EmbeddingGemma task deliberately: vectors are only comparable
+when they use a compatible prompt contract.
 
 ``` r
 
-note <- paste(
-  "The proband presents with global developmental delay, seizures,",
-  "short stature, cardiomyopathy, and no diabetes mellitus."
+library(Rbebelm)
+
+embedding_model <- embeddinggemma_model_load(
+  Sys.getenv("EMBEDDING_GEMMA_WEIGHTS_FILE"),
+  num_threads = 8
+)
+dense_provider <- ducksemantics_embeddinggemma_provider(
+  embedding_model,
+  label = "embeddinggemma-hpo-v1",
+  task = "semantic_similarity",
+  dimensions = 256L
 )
 
-mentions <- ducksemantics_annotate(conn, note, document_id = "readme-case-001")
-unique(mentions[, c("span", "node_id", "alias_kind", "source")])
-#>                          span       node_id    alias_kind    source
-#> 1  global developmental delay    HP:0001263         label    hp.obo
-#> 2                    seizures    HP:0001250 synonym:exact    hp.obo
-#> 3               short stature    HP:0004322         label    hp.obo
-#> 4               short stature    HP:0004322 synonym:exact    hp.obo
-#> 5               short stature    HP:0004322         label mondo.obo
-#> 6              cardiomyopathy    HP:0001638         label    hp.obo
-#> 7              cardiomyopathy    HP:0001638         label mondo.obo
-#> 8              cardiomyopathy MONDO:0004994         label mondo.obo
-#> 9              cardiomyopathy MONDO:0004994 synonym:exact mondo.obo
-#> 10          diabetes mellitus    HP:0000819         label    hp.obo
-#> 11          diabetes mellitus    HP:0000819         label mondo.obo
-#> 12          diabetes mellitus MONDO:0005015         label mondo.obo
-#> 13          diabetes mellitus MONDO:0005015 synonym:exact mondo.obo
-```
-
-The BebeLM bridge is typed as an embedding provider. The model load
-controls the Rust thread pool; the provider controls token batching for
-long texts and sequence batching across independent texts. The vectors
-below come from the local GGUF model and are cached as RDS because they
-are deterministic for the same model and pooling configuration.
-
-``` r
-
-bebel_threads <- as.integer(Sys.getenv("BEBELM_NUM_THREADS", "16"))
-model <- bebel_model_load(weights_file, num_threads = bebel_threads)
-embedding_provider <- ducksemantics_bebel_embedding_provider(
-  model,
-  pooling = "mean",
-  token_batch_size = 512L,
-  sequence_batch_size = 1024L,
-  check_interrupt = TRUE
+terms <- DBI::dbGetQuery(conn, "SELECT node_id, label FROM semantic_nodes WHERE family = 'HPO'")
+vectors <- ducksemantics_embed_cached(
+  terms$label,
+  provider = dense_provider,
+  cache_dir = "embeddinggemma-hpo-cache"
 )
-
-embedding_terms <- c(
-  "global developmental delay",
-  "seizures",
-  "short stature",
-  "cardiomyopathy",
-  "diabetes mellitus"
-)
-
-embeddings <- ducksemantics_cache_rds(
-  file.path(cache_dir, "readme-bebel-embeddings.rds"),
-  function() ducksemantics_embed(embedding_provider, embedding_terms)
-)
-
-data.frame(
-  terms = nrow(embeddings),
-  dimensions = ncol(embeddings),
-  first_row_l2 = round(sqrt(sum(embeddings[1, ] ^ 2)), 4)
-)
-#>   terms dimensions first_row_l2
-#> 1     5       2048            1
-```
-
-BebeLM embeddings are written back to DuckDB, then searched with DuckDB
-vector functions. HNSW can be added by the same index spec; the README
-materializes the fixed-dimension table without building the
-extension-backed index so the example stays focused on the package API.
-
-``` r
-
-embedding_label <- "Rbebelm mean"
-
 ducksemantics_embedding_batch(
-  embeddings = embeddings,
-  subject_id = embedding_terms,
-  subject_kind = "readme_term",
-  provider = embedding_label,
-  text = embedding_terms
-) |>
-  ducksemantics_write_embeddings(conn, replace = TRUE)
+  vectors,
+  subject_id = terms$node_id,
+  subject_kind = "hpo_term",
+  provider = "embeddinggemma-hpo-v1",
+  text = terms$label
+) |> ducksemantics_write_embeddings(conn, replace = TRUE)
 
-ducksemantics_embedding_query(
-  embeddings[match("short stature", embedding_terms), , drop = FALSE],
-  provider = embedding_label,
-  subject_kind = "readme_term",
-  top_k = 3
-) |>
-  ducksemantics_embedding_search(conn)
-#>                   subject_id subject_kind     provider                       text  dim
-#> 1              short stature  readme_term Rbebelm mean              short stature 2048
-#> 2          diabetes mellitus  readme_term Rbebelm mean          diabetes mellitus 2048
-#> 3 global developmental delay  readme_term Rbebelm mean global developmental delay 2048
-#>       score
-#> 1 1.0000000
-#> 2 0.9597000
-#> 3 0.9579571
-
-embedding_index <- ducksemantics_embedding_index_spec(
-  dimensions = ncol(embeddings),
-  provider = embedding_label,
-  subject_kind = "readme_term",
-  hnsw = FALSE
-) |>
-  ducksemantics_materialize_embedding_index(conn)
-
-ducksemantics_embedding_query(
-  embeddings[match("cardiomyopathy", embedding_terms), , drop = FALSE],
-  table = embedding_index,
-  provider = embedding_label,
-  subject_kind = "readme_term",
-  top_k = 3
-) |>
-  ducksemantics_embedding_search(conn)
-#>          subject_id subject_kind     provider              text  dim     score
-#> 1    cardiomyopathy  readme_term Rbebelm mean    cardiomyopathy 2048 1.0000000
-#> 2 diabetes mellitus  readme_term Rbebelm mean diabetes mellitus 2048 0.9355308
-#> 3          seizures  readme_term Rbebelm mean          seizures 2048 0.9351248
+# An HNSW index is optional. Exact DuckDB vector search also works.
+dense_index <- ducksemantics_embedding_index_spec(
+  dimensions = ncol(vectors),
+  provider = "embeddinggemma-hpo-v1",
+  subject_kind = "hpo_term",
+  hnsw = TRUE
+) |> ducksemantics_materialize_embedding_index(conn)
 ```
 
-Late interaction uses token-level hidden states. The first
-implementation is an exact MaxSim reranker over stored token blocks,
-intended for candidate sets from aliases, FTS, graph neighborhoods, or
-pooled-vector search.
+## Exact late interaction with native ColBERT
+
+ColBERT document vectors are persisted once. A query is encoded with its
+own native query contract; the DuckDB reranker computes the exact MaxSim
+sum over the stored document vectors. For a very large corpus, use dense
+HNSW, lexical, or graph candidates first, then restrict
+`candidate_subject_id` for the MaxSim pass.
 
 ``` r
 
-token_provider <- ducksemantics_bebel_token_embedding_provider(
-  model,
-  label = "Rbebelm token",
-  token_batch_size = 512L,
-  check_interrupt = TRUE
+colbert_model <- colbert_model_load(
+  Sys.getenv("COLBERT_WEIGHTS_FILE"),
+  num_threads = 8
+)
+colbert_documents <- ducksemantics_colbert_provider(
+  colbert_model,
+  role = "document",
+  label = "lfm2.5-colbert-350m-q4km"
 )
 
-token_batch <- ducksemantics_cache_rds(
-  file.path(cache_dir, "readme-bebel-token-embeddings.rds"),
-  function() {
-    ducksemantics_token_embedding_batch_from_provider(
-      embedding_terms,
-      provider = token_provider,
-      subject_id = embedding_terms,
-      subject_kind = "readme_term"
-    )
-  }
-)
+ducksemantics_token_embedding_batch_from_provider(
+  terms$label,
+  provider = colbert_documents,
+  subject_id = terms$node_id,
+  subject_kind = "hpo_term"
+) |> ducksemantics_write_token_embeddings(conn, replace = TRUE)
 
-token_batch |>
-  ducksemantics_write_token_embeddings(conn, replace = TRUE)
-
-query_tokens <- ducksemantics_token_embed(token_provider, "short height")[[1L]]
-
-ducksemantics_token_embedding_query(
-  query_tokens$embeddings,
-  provider = "Rbebelm token",
-  subject_kind = "readme_term",
-  top_k = 3
-) |>
-  ducksemantics_late_interaction_search(conn)
-#> <ducksemantics late-interaction result>
-#>   blocks: 3
-#>   top score: 0.9079
+hits <- ducksemantics_colbert_query(
+  colbert_model,
+  "developmental delay with seizures",
+  provider = "lfm2.5-colbert-350m-q4km",
+  subject_kind = "hpo_term",
+  top_k = 25L
+) |> ducksemantics_late_interaction_search(conn)
 ```
 
-The first semantic measurement is ontology clustering: embed every HPO
-and MONDO label, store the vectors in DuckDB, cluster them, and compare
-cluster assignments against direct graph edges. The embeddings are
-cached in chunks because this is a real BebeLM pass over the ontology
-labels.
+The token rows contain native 128-dimensional ColBERT document vectors,
+not BebeLM causal states. `duckdb-vss` can accelerate the EmbeddingGemma
+dense stage, but it does not implement variable-length ColBERT MaxSim.
+
+## BebeLM candidate judgment
+
+The final local LLM stage only receives candidates and context already
+grounded by deterministic retrieval. Its structured response can drop
+negated, uncertain, historical, or wrong-subject mentions; it may only
+replace a concept with an explicitly supplied candidate or graph
+neighbor.
 
 ``` r
 
-ontology_label_terms <- DBI::dbGetQuery(
-  conn,
-  paste(
-    "SELECT node_id, family, label",
-    "FROM semantic_nodes",
-    "WHERE label IS NOT NULL",
-    "ORDER BY family, node_id"
-  )
+generation_model <- bebel_model_load(Sys.getenv("BEBELM_WEIGHTS_FILE"), num_threads = 8)
+agent <- bebel_agent(generation_model, greedy = TRUE, max_gen = 192L, max_think = 0L)
+
+judgments <- ducksemantics_bebel_judge(
+  agent,
+  text = "The proband has short stature and no diabetes mellitus.",
+  mentions = mentions,
+  conn = conn,
+  parser = ducksemantics_bebel_tool_judgment_parser(),
+  model = "LFM2.5-8B-A1B"
 )
-
-ontology_embedding_label <- "Rbebelm ontology label mean"
-ontology_label_embeddings <- ontology_label_terms$label |>
-  ducksemantics_embed_cached(
-    provider = embedding_provider,
-    cache_dir = file.path(cache_dir, "readme-bebel-ontology-label-embeddings"),
-    chunk_size = 1024L
-  )
-
-ducksemantics_embedding_batch(
-  embeddings = ontology_label_embeddings,
-  subject_id = ontology_label_terms$node_id,
-  subject_kind = "node",
-  provider = ontology_embedding_label,
-  text = ontology_label_terms$label
-) |>
-  ducksemantics_write_embeddings(conn, replace = TRUE)
-
-rfmalloc_path <- file.path(cache_dir, "readme-ontology-clusters.fmalloc")
-unlink(rfmalloc_path, force = TRUE)
-rfmalloc_runtime <- Rfmalloc::open_fmalloc(
-  rfmalloc_path,
-  mode = "scratch",
-  size_gb = 8
-)
-
-ontology_clusters <- ducksemantics_embedding_cluster_spec(
-  k = 32,
-  provider = ontology_embedding_label,
-  subject_kind = "node",
-  dimensions = ncol(ontology_label_embeddings),
-  run_id = "readme-ontology-label-clusters",
-  nstart = 1,
-  max_iter = 30,
-  storage = "rfmalloc"
-) |>
-  ducksemantics_cluster_embeddings(conn, rfmalloc_runtime = rfmalloc_runtime)
-
-Rfmalloc::cleanup_fmalloc(rfmalloc_runtime)
-
-head(ontology_clusters$summary[order(-ontology_clusters$summary$size), ], 8)
-#>                    cluster_run_id cluster_id size  withinss mean_distance
-#> 10 readme-ontology-label-clusters         10 5176 240.93494     0.2132693
-#> 4  readme-ontology-label-clusters          4 4568 158.62406     0.1835612
-#> 9  readme-ontology-label-clusters          9 4028 243.59611     0.2439811
-#> 18 readme-ontology-label-clusters         18 3535 232.95918     0.2552565
-#> 29 readme-ontology-label-clusters         29 3523 230.87402     0.2542924
-#> 15 readme-ontology-label-clusters         15 3447 185.65704     0.2303807
-#> 21 readme-ontology-label-clusters         21 3386 169.69024     0.2208094
-#> 25 readme-ontology-label-clusters         25 2999  85.37741     0.1647605
-ducksemantics_embedding_cluster_graph_agreement(
-  conn,
-  ontology_clusters$cluster_run_id,
-  predicates = c("is_a", "part_of")
-)
-#>                   cluster_run_id edge_count same_cluster_edges same_cluster_rate
-#> 1 readme-ontology-label-clusters      68994              24055         0.3486535
-```
-
-BebeLM judgment uses the same provider interface. The parser here
-accepts BebeLM tool calls and JSON judgment payloads, then returns the
-rows expected by the semantic store.
-
-``` r
-
-judgment_mentions <- data.frame(
-  mention_id = "readme-judgment:000001",
-  node_id = "HP:0004322",
-  span = "short stature",
-  start_offset = 26L,
-  end_offset = 39L,
-  score = 1,
-  alias = "short stature",
-  alias_kind = "label",
-  source = "hp.obo",
-  stringsAsFactors = FALSE
-)
-
-judgment_instructions <- c(
-  "You adjudicate deterministic semantic grounding candidates.",
-  "Return only JSON: an array of objects with mention_id, decision, confidence, evidence_span, short_reason.",
-  "Use keep for a supported patient finding. Never invent identifiers."
-)
-
-judgment <- ducksemantics_cache_rds(
-  file.path(cache_dir, "readme-bebel-judgment.rds"),
-  function() {
-    agent <- bebel_agent(model, greedy = TRUE, max_gen = 96, max_think = 0)
-    ducksemantics_bebel_judge(
-      agent,
-      "The proband presents with short stature.",
-      judgment_mentions,
-      instructions = judgment_instructions,
-      parser = ducksemantics_bebel_tool_judgment_parser(),
-      record = FALSE
-    )
-  }
-)
-
-judgment[, c("subject_id", "object_id", "decision", "confidence", "model")]
-#>               subject_id  object_id decision confidence   model
-#> 1 readme-judgment:000001 HP:0004322     keep          1 Rbebelm
-```
-
-Benchmarks are ordinary R data flowing through pipes. The metrics below
-use gold HPO phenotypes and expose the current lexical baseline before
-model judgment removes negated or disease-level mentions.
-
-``` r
-
-suite <- ducksemantics_benchmark_cases(
-  cases = data.frame(
-    case_id = "readme-case-001",
-    text = note,
-    stringsAsFactors = FALSE
-  ),
-  gold = data.frame(
-    case_id = "readme-case-001",
-    node_id = c("HP:0001263", "HP:0001250", "HP:0004322", "HP:0001638"),
-    stringsAsFactors = FALSE
-  ),
-  suite = "readme-hpo-mondo",
-  source = "README.Rmd",
-  version = format(Sys.Date(), "%Y-%m-%d")
-)
-
-result <- suite |>
-  ducksemantics_benchmark(conn)
-
-result
-#> <ducksemantics benchmark>
-#>   suite: readme-hpo-mondo
-#>   task: grounding
-#>   cases: 1
-#>   elapsed: 0.172 s
-#>   F1: 0.727
-result$summary
-#>              suite      task case_count gold_count prediction_count elapsed_seconds
-#> 1 readme-hpo-mondo grounding          1          4               13           0.172
-#>   case_seconds token_count tokens_per_second cases_per_second prediction_bytes
-#> 1        0.169          15           87.2093         5.813953             6152
-result$metrics
-#>     by tp fp fn precision recall        f1
-#> 1 node  4  3  0 0.5714286      1 0.7272727
-result$timings[, c("case_id", "seconds", "token_count", "gold_count", "prediction_count")]
-#>           case_id seconds token_count gold_count prediction_count
-#> 1 readme-case-001   0.169          15          4               13
-```
-
-``` r
-
-DBI::dbDisconnect(conn, shutdown = TRUE)
 ```
 
 # Package index
@@ -563,10 +272,12 @@ DBI::dbDisconnect(conn, shutdown = TRUE)
   : Create the default JSON judgment parser
 - [`ducksemantics_bebel_runner()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_runner.md)
   : Create a BebeLM prompt runner
-- [`ducksemantics_bebel_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_embedding_provider.md)
-  : Create a BebeLM embedding provider
-- [`ducksemantics_bebel_token_embedding_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_token_embedding_provider.md)
-  : Create a BebeLM token embedding provider
+- [`ducksemantics_embeddinggemma_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embeddinggemma_provider.md)
+  : Create an EmbeddingGemma dense retrieval provider
+- [`ducksemantics_colbert_provider()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_provider.md)
+  : Create a native ColBERT token-vector provider
+- [`ducksemantics_colbert_query()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_query.md)
+  : Construct a ColBERT late-interaction query
 - [`ducksemantics_bebel_tool_judgment_parser()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_tool_judgment_parser.md)
   : Create a BebeLM tool-call judgment parser
 

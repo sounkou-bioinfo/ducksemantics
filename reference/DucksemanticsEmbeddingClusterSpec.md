@@ -14,8 +14,7 @@ DucksemanticsEmbeddingClusterSpec(
   run_id = character(0),
   seed = integer(0),
   nstart = integer(0),
-  max_iter = integer(0),
-  storage = character(0)
+  max_iter = integer(0)
 )
 ```
 
@@ -59,11 +58,11 @@ DucksemanticsEmbeddingClusterSpec(
 
   Maximum k-means iterations.
 
-- storage:
-
-  Matrix storage for the clustering pass. `"r"` uses an ordinary R
-  matrix. `"rfmalloc"` allocates the working matrix through Rfmalloc.
-
 ## Value
 
 A `DucksemanticsEmbeddingClusterSpec` object.
+
+## Details
+
+Clustering always materializes an ordinary finite R matrix from the
+DuckDB `FLOAT[]` rows.

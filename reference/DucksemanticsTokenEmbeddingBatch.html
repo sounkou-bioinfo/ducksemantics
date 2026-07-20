@@ -49,8 +49,6 @@
 <span>  token <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  start_offset <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  end_offset <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  storage <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="fl">0</span><span class="op">)</span>,</span>
-<span>  storage_ref <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  attrs <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -94,16 +92,6 @@ zero-based order within <code>subject_id</code>.</p></dd>
 <dd><p>Optional zero-based source offsets.</p></dd>
 
 
-<dt id="arg-storage">storage<a class="anchor" aria-label="anchor" href="#arg-storage"></a></dt>
-<dd><p>Storage label. <code>"duckdb_float_array"</code> means <code>embedding</code>
-stores each token row directly in DuckDB. <code>"rfmalloc_slab"</code> is reserved for
-native slabs addressed by <code>storage_ref</code>.</p></dd>
-
-
-<dt id="arg-storage-ref">storage_ref<a class="anchor" aria-label="anchor" href="#arg-storage-ref"></a></dt>
-<dd><p>Optional native storage reference.</p></dd>
-
-
 <dt id="arg-attrs">attrs<a class="anchor" aria-label="anchor" href="#arg-attrs"></a></dt>
 <dd><p>Optional JSON text or other metadata for each token row.</p></dd>
 
@@ -111,6 +99,11 @@ native slabs addressed by <code>storage_ref</code>.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>DucksemanticsTokenEmbeddingBatch</code> object.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Token vectors are always persisted as DuckDB <code>FLOAT[]</code> rows. This
+makes the index durable and queryable without an external allocator.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -122,7 +115,7 @@ native slabs addressed by <code>storage_ref</code>.</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

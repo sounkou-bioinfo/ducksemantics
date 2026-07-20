@@ -22,10 +22,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/DucksemanticsTokenEmbeddingQuery.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics-package.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_annotate.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_embedding_provider.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_judge.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_runner.html</loc></url>
-<url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_token_embedding_provider.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_bebel_tool_judgment_parser.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_benchmark.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_benchmark_cases.html</loc></url>
@@ -34,6 +32,8 @@
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_cache_rds.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_closure_sql.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_cluster_embeddings.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_provider.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_colbert_query.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_connect.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_default_judgment_instructions.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embed_cached.html</loc></url>
@@ -45,6 +45,7 @@
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_provider.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_query.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embedding_search.html</loc></url>
+<url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_embeddinggemma_provider.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_index_aliases.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_index_stats.html</loc></url>
 <url><loc>https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_init.html</loc></url>

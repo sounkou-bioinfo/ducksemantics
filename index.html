@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="DuckDB-Native Semantic Graph Grounding">
-<meta name="description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, and BebeLM-compatible judgment prompts for enrichment, negation, uncertainty, and provenance-bearing decisions. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
-<meta property="og:description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, and BebeLM-compatible judgment prompts for enrichment, negation, uncertainty, and provenance-bearing decisions. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
+<meta name="description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, EmbeddingGemma dense retrieval, ColBERT late interaction, and BebeLM judgment prompts. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
+<meta property="og:description" content="DuckDB-native semantic graph grounding over arbitrary concept graphs. The package owns graph schema creation, alias indexing, lexical mention grounding, transitive graph closure, EmbeddingGemma dense retrieval, ColBERT late interaction, and BebeLM judgment prompts. HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not special package APIs.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -49,375 +49,129 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="ducksemantics">ducksemantics<a class="anchor" aria-label="anchor" href="#ducksemantics"></a>
 </h1></div>
-<p><code>ducksemantics</code> is a DuckDB-native semantic graph and grounding package for R. The package owns the graph schema, OBO import, alias indexing, mention grounding, provider interfaces, model judgment, and benchmark measurement.</p>
-<p>HPO and MONDO are first-class graph sources here, but they are not the whole abstraction. The same tables can hold ORPHANET, study notes, pi-bio-agent memory edges, run ledgers, and local concept maps. BebeLM/Rbebelm is the bundled on-device provider for CPU embedding and judgment; other providers implement the same S7 generics.</p>
+<p><code>ducksemantics</code> is a DuckDB-native semantic graph and evidence-grounding package for R. It stores ontology nodes, aliases, graph edges, dense vectors, and native ColBERT document token vectors in one auditable DuckDB database.</p>
+<p>It uses the dedicated Rbebelm model surfaces rather than causal generator hidden states:</p>
+<ul>
+<li>
+<strong>EmbeddingGemma</strong> provides dense, task-prompted vectors for broad retrieval and optional DuckDB HNSW candidate generation.</li>
+<li>
+<strong>LFM2.5-ColBERT</strong> provides exact late-interaction MaxSim reranking of stored candidate documents.</li>
+<li>
+<strong>BebeLM</strong> provides local structured judgment of deterministic candidates, including negation, uncertainty, family history, and subject context.</li>
+</ul>
+<p>HPO, MONDO, ORPHANET, and local knowledge graphs are sources for the same graph schema, not special-purpose APIs.</p>
+<div class="section level2">
+<h2 id="build-a-semantic-graph">Build a semantic graph<a class="anchor" aria-label="anchor" href="#build-a-semantic-graph"></a>
+</h2>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">suppressPackageStartupMessages</a></span><span class="op">(</span><span class="op">{</span></span>
-<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link">ducksemantics</a></span><span class="op">)</span></span>
-<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rbebelm" class="external-link">Rbebelm</a></span><span class="op">)</span></span>
-<span>  <span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/Rfmalloc" class="external-link">Rfmalloc</a></span><span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link">ducksemantics</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">cache_dir</span> <span class="op">&lt;-</span> <span class="fu">tools</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/tools/userdir.html" class="external-link">R_user_dir</a></span><span class="op">(</span><span class="st">"ducksemantics"</span>, <span class="st">"cache"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ontology_files</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  HPO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_cache_file.html">ducksemantics_cache_file</a></span><span class="op">(</span></span>
-<span>    <span class="st">"https://purl.obolibrary.org/obo/hp.obo"</span>,</span>
-<span>    <span class="st">"hp.obo"</span>,</span>
-<span>    cache_dir <span class="op">=</span> <span class="va">cache_dir</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  MONDO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_cache_file.html">ducksemantics_cache_file</a></span><span class="op">(</span></span>
-<span>    <span class="st">"https://purl.obolibrary.org/obo/mondo.obo"</span>,</span>
-<span>    <span class="st">"mondo.obo"</span>,</span>
-<span>    cache_dir <span class="op">=</span> <span class="va">cache_dir</span></span>
-<span>  <span class="op">)</span></span>
+<span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="st">"semantic.duckdb"</span><span class="op">)</span></span>
+<span><span class="va">hpo</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="st">"hp.obo"</span>, family <span class="op">=</span> <span class="st">"HPO"</span>, source <span class="op">=</span> <span class="st">"hp.obo"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
+<span>  <span class="va">conn</span>,</span>
+<span>  nodes <span class="op">=</span> <span class="va">hpo</span><span class="op">$</span><span class="va">nodes</span>,</span>
+<span>  aliases <span class="op">=</span> <span class="va">hpo</span><span class="op">$</span><span class="va">aliases</span>,</span>
+<span>  edges <span class="op">=</span> <span class="va">hpo</span><span class="op">$</span><span class="va">edges</span>,</span>
+<span>  replace <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">weights_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span></span>
-<span>  <span class="st">"BEBELM_WEIGHTS_FILE"</span>,</span>
-<span>  <span class="st">"/root/bebelm/LFM2.5-8B-A1B-Q4_K_M.gguf"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.exists</a></span><span class="op">(</span><span class="va">weights_file</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>The OBO parser produces the graph rows that DuckDB stores and indexes.</p>
+<span><span class="co"># Deterministic, explainable candidates. This intentionally includes negated</span></span>
+<span><span class="co"># mentions; BebeLM judgment decides whether the mention is a patient finding.</span></span>
+<span><span class="va">mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_annotate.html">ducksemantics_annotate</a></span><span class="op">(</span></span>
+<span>  <span class="va">conn</span>,</span>
+<span>  <span class="st">"The proband has short stature and seizures but no diabetes mellitus."</span>,</span>
+<span>  document_id <span class="op">=</span> <span class="st">"case-001"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="dense-retrieval-with-embeddinggemma">Dense retrieval with EmbeddingGemma<a class="anchor" aria-label="anchor" href="#dense-retrieval-with-embeddinggemma"></a>
+</h2>
+<p>Use a retrieval-trained dense encoder for broad candidate generation. Choose an EmbeddingGemma task deliberately: vectors are only comparable when they use a compatible prompt contract.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">graphs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>  HPO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="va">ontology_files</span><span class="op">[[</span><span class="st">"HPO"</span><span class="op">]</span><span class="op">]</span>, family <span class="op">=</span> <span class="st">"HPO"</span>, source <span class="op">=</span> <span class="st">"hp.obo"</span><span class="op">)</span>,</span>
-<span>  MONDO <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="va">ontology_files</span><span class="op">[[</span><span class="st">"MONDO"</span><span class="op">]</span><span class="op">]</span>, family <span class="op">=</span> <span class="st">"MONDO"</span>, source <span class="op">=</span> <span class="st">"mondo.obo"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">Rbebelm</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">embedding_model</span> <span class="op">&lt;-</span> <span class="fu">embeddinggemma_model_load</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"EMBEDDING_GEMMA_WEIGHTS_FILE"</span><span class="op">)</span>,</span>
+<span>  num_threads <span class="op">=</span> <span class="fl">8</span></span>
+<span><span class="op">)</span></span>
+<span><span class="va">dense_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embeddinggemma_provider.html">ducksemantics_embeddinggemma_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">embedding_model</span>,</span>
+<span>  label <span class="op">=</span> <span class="st">"embeddinggemma-hpo-v1"</span>,</span>
+<span>  task <span class="op">=</span> <span class="st">"semantic_similarity"</span>,</span>
+<span>  dimensions <span class="op">=</span> <span class="fl">256L</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  source <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">graphs</span><span class="op">)</span>,</span>
-<span>  nodes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">nodes</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  aliases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">aliases</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  edges <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">graphs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">edges</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">integer</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span>,</span>
-<span>  row.names <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="va">terms</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">conn</span>, <span class="st">"SELECT node_id, label FROM semantic_nodes WHERE family = 'HPO'"</span><span class="op">)</span></span>
+<span><span class="va">vectors</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embed_cached.html">ducksemantics_embed_cached</a></span><span class="op">(</span></span>
+<span>  <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
+<span>  provider <span class="op">=</span> <span class="va">dense_provider</span>,</span>
+<span>  cache_dir <span class="op">=</span> <span class="st">"embeddinggemma-hpo-cache"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="co">#&gt;   source nodes aliases  edges</span></span>
-<span><span class="co">#&gt; 1    HPO 19836   46065  24378</span></span>
-<span><span class="co">#&gt; 2  MONDO 56273  149279 115738</span></span></code></pre></div>
-<p>The database below is rebuilt from those full ontologies, then indexed once for lexical grounding.</p>
+<span><span class="fu"><a href="reference/ducksemantics_embedding_batch.html">ducksemantics_embedding_batch</a></span><span class="op">(</span></span>
+<span>  <span class="va">vectors</span>,</span>
+<span>  subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"embeddinggemma-hpo-v1"</span>,</span>
+<span>  text <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">label</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_embeddings.html">ducksemantics_write_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># An HNSW index is optional. Exact DuckDB vector search also works.</span></span>
+<span><span class="va">dense_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embedding_index_spec.html">ducksemantics_embedding_index_spec</a></span><span class="op">(</span></span>
+<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">vectors</span><span class="op">)</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"embeddinggemma-hpo-v1"</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
+<span>  hnsw <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_materialize_embedding_index.html">ducksemantics_materialize_embedding_index</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="exact-late-interaction-with-native-colbert">Exact late interaction with native ColBERT<a class="anchor" aria-label="anchor" href="#exact-late-interaction-with-native-colbert"></a>
+</h2>
+<p>ColBERT document vectors are persisted once. A query is encoded with its own native query contract; the DuckDB reranker computes the exact MaxSim sum over the stored document vectors. For a very large corpus, use dense HNSW, lexical, or graph candidates first, then restrict <code>candidate_subject_id</code> for the MaxSim pass.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">db_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme.duckdb"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">db_path</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="va">db_path</span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
-<span>  <span class="va">conn</span>,</span>
-<span>  nodes <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">nodes</span>,</span>
-<span>  aliases <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">aliases</span>,</span>
-<span>  edges <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">HPO</span><span class="op">$</span><span class="va">edges</span>,</span>
-<span>  replace <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  index <span class="op">=</span> <span class="cn">FALSE</span></span>
+<code class="sourceCode R"><span><span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"COLBERT_WEIGHTS_FILE"</span><span class="op">)</span>,</span>
+<span>  num_threads <span class="op">=</span> <span class="fl">8</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
-<span>  <span class="va">conn</span>,</span>
-<span>  nodes <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">nodes</span>,</span>
-<span>  aliases <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">aliases</span>,</span>
-<span>  edges <span class="op">=</span> <span class="va">graphs</span><span class="op">$</span><span class="va">MONDO</span><span class="op">$</span><span class="va">edges</span>,</span>
-<span>  index <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">colbert_model</span>,</span>
+<span>  role <span class="op">=</span> <span class="st">"document"</span>,</span>
+<span>  label <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="reference/ducksemantics_index_stats.html">ducksemantics_index_stats</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span><span class="op">$</span><span class="va">tables</span></span>
-<span><span class="co">#&gt;                           table row_count</span></span>
-<span><span class="co">#&gt; 1                semantic_nodes     71333</span></span>
-<span><span class="co">#&gt; 2              semantic_aliases    195344</span></span>
-<span><span class="co">#&gt; 3          semantic_alias_index    195344</span></span>
-<span><span class="co">#&gt; 4                semantic_edges    140110</span></span>
-<span><span class="co">#&gt; 5       semantic_entailed_edges         0</span></span>
-<span><span class="co">#&gt; 6             semantic_mentions         0</span></span>
-<span><span class="co">#&gt; 7            semantic_judgments         0</span></span>
-<span><span class="co">#&gt; 8           semantic_embeddings         0</span></span>
-<span><span class="co">#&gt; 9     semantic_token_embeddings         0</span></span>
-<span><span class="co">#&gt; 10  semantic_embedding_clusters         0</span></span>
-<span><span class="co">#&gt; 11 semantic_embedding_centroids         0</span></span></code></pre></div>
-<p>Grounding returns deterministic candidates with source provenance. The diabetes mention is deliberately negated; the lexical layer should surface it, and the judgment layer should decide whether it belongs in the patient phenotype.</p>
+<span><span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
+<span>  provider <span class="op">=</span> <span class="va">colbert_documents</span>,</span>
+<span>  subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_query.html">ducksemantics_colbert_query</a></span><span class="op">(</span></span>
+<span>  <span class="va">colbert_model</span>,</span>
+<span>  <span class="st">"developmental delay with seizures"</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">25L</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span></code></pre></div>
+<p>The token rows contain native 128-dimensional ColBERT document vectors, not BebeLM causal states. <code>duckdb-vss</code> can accelerate the EmbeddingGemma dense stage, but it does not implement variable-length ColBERT MaxSim.</p>
+</div>
+<div class="section level2">
+<h2 id="bebelm-candidate-judgment">BebeLM candidate judgment<a class="anchor" aria-label="anchor" href="#bebelm-candidate-judgment"></a>
+</h2>
+<p>The final local LLM stage only receives candidates and context already grounded by deterministic retrieval. Its structured response can drop negated, uncertain, historical, or wrong-subject mentions; it may only replace a concept with an explicitly supplied candidate or graph neighbor.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">note</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
-<span>  <span class="st">"The proband presents with global developmental delay, seizures,"</span>,</span>
-<span>  <span class="st">"short stature, cardiomyopathy, and no diabetes mellitus."</span></span>
-<span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">generation_model</span> <span class="op">&lt;-</span> <span class="fu">bebel_model_load</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"BEBELM_WEIGHTS_FILE"</span><span class="op">)</span>, num_threads <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span>
+<span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">bebel_agent</span><span class="op">(</span><span class="va">generation_model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">192L</span>, max_think <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_annotate.html">ducksemantics_annotate</a></span><span class="op">(</span><span class="va">conn</span>, <span class="va">note</span>, document_id <span class="op">=</span> <span class="st">"readme-case-001"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">mentions</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"span"</span>, <span class="st">"node_id"</span>, <span class="st">"alias_kind"</span>, <span class="st">"source"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                          span       node_id    alias_kind    source</span></span>
-<span><span class="co">#&gt; 1  global developmental delay    HP:0001263         label    hp.obo</span></span>
-<span><span class="co">#&gt; 2                    seizures    HP:0001250 synonym:exact    hp.obo</span></span>
-<span><span class="co">#&gt; 3               short stature    HP:0004322         label    hp.obo</span></span>
-<span><span class="co">#&gt; 4               short stature    HP:0004322 synonym:exact    hp.obo</span></span>
-<span><span class="co">#&gt; 5               short stature    HP:0004322         label mondo.obo</span></span>
-<span><span class="co">#&gt; 6              cardiomyopathy    HP:0001638         label    hp.obo</span></span>
-<span><span class="co">#&gt; 7              cardiomyopathy    HP:0001638         label mondo.obo</span></span>
-<span><span class="co">#&gt; 8              cardiomyopathy MONDO:0004994         label mondo.obo</span></span>
-<span><span class="co">#&gt; 9              cardiomyopathy MONDO:0004994 synonym:exact mondo.obo</span></span>
-<span><span class="co">#&gt; 10          diabetes mellitus    HP:0000819         label    hp.obo</span></span>
-<span><span class="co">#&gt; 11          diabetes mellitus    HP:0000819         label mondo.obo</span></span>
-<span><span class="co">#&gt; 12          diabetes mellitus MONDO:0005015         label mondo.obo</span></span>
-<span><span class="co">#&gt; 13          diabetes mellitus MONDO:0005015 synonym:exact mondo.obo</span></span></code></pre></div>
-<p>The BebeLM bridge is typed as an embedding provider. The model load controls the Rust thread pool; the provider controls token batching for long texts and sequence batching across independent texts. The vectors below come from the local GGUF model and are cached as RDS because they are deterministic for the same model and pooling configuration.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bebel_threads</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"BEBELM_NUM_THREADS"</span>, <span class="st">"16"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">model</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sounkou-bioinfo.github.io/Rbebelm/reference/bebel_model_load.html" class="external-link">bebel_model_load</a></span><span class="op">(</span><span class="va">weights_file</span>, num_threads <span class="op">=</span> <span class="va">bebel_threads</span><span class="op">)</span></span>
-<span><span class="va">embedding_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_embedding_provider.html">ducksemantics_bebel_embedding_provider</a></span><span class="op">(</span></span>
-<span>  <span class="va">model</span>,</span>
-<span>  pooling <span class="op">=</span> <span class="st">"mean"</span>,</span>
-<span>  token_batch_size <span class="op">=</span> <span class="fl">512L</span>,</span>
-<span>  sequence_batch_size <span class="op">=</span> <span class="fl">1024L</span>,</span>
-<span>  check_interrupt <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">embedding_terms</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"global developmental delay"</span>,</span>
-<span>  <span class="st">"seizures"</span>,</span>
-<span>  <span class="st">"short stature"</span>,</span>
-<span>  <span class="st">"cardiomyopathy"</span>,</span>
-<span>  <span class="st">"diabetes mellitus"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">embeddings</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-embeddings.rds"</span><span class="op">)</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="fu"><a href="reference/ducksemantics_provider_generics.html">ducksemantics_embed</a></span><span class="op">(</span><span class="va">embedding_provider</span>, <span class="va">embedding_terms</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  terms <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">)</span>,</span>
-<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">)</span>,</span>
-<span>  first_row_l2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">[</span><span class="fl">1</span>, <span class="op">]</span> <span class="op">^</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, <span class="fl">4</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;   terms dimensions first_row_l2</span></span>
-<span><span class="co">#&gt; 1     5       2048            1</span></span></code></pre></div>
-<p>BebeLM embeddings are written back to DuckDB, then searched with DuckDB vector functions. HNSW can be added by the same index spec; the README materializes the fixed-dimension table without building the extension-backed index so the example stays focused on the package API.</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">embedding_label</span> <span class="op">&lt;-</span> <span class="st">"Rbebelm mean"</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/ducksemantics_embedding_batch.html">ducksemantics_embedding_batch</a></span><span class="op">(</span></span>
-<span>  embeddings <span class="op">=</span> <span class="va">embeddings</span>,</span>
-<span>  subject_id <span class="op">=</span> <span class="va">embedding_terms</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">embedding_label</span>,</span>
-<span>  text <span class="op">=</span> <span class="va">embedding_terms</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_write_embeddings.html">ducksemantics_write_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/ducksemantics_embedding_query.html">ducksemantics_embedding_query</a></span><span class="op">(</span></span>
-<span>  <span class="va">embeddings</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/match.html" class="external-link">match</a></span><span class="op">(</span><span class="st">"short stature"</span>, <span class="va">embedding_terms</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">embedding_label</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
-<span>  top_k <span class="op">=</span> <span class="fl">3</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_embedding_search.html">ducksemantics_embedding_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                   subject_id subject_kind     provider                       text  dim</span></span>
-<span><span class="co">#&gt; 1              short stature  readme_term Rbebelm mean              short stature 2048</span></span>
-<span><span class="co">#&gt; 2          diabetes mellitus  readme_term Rbebelm mean          diabetes mellitus 2048</span></span>
-<span><span class="co">#&gt; 3 global developmental delay  readme_term Rbebelm mean global developmental delay 2048</span></span>
-<span><span class="co">#&gt;       score</span></span>
-<span><span class="co">#&gt; 1 1.0000000</span></span>
-<span><span class="co">#&gt; 2 0.9597000</span></span>
-<span><span class="co">#&gt; 3 0.9579571</span></span>
-<span></span>
-<span><span class="va">embedding_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embedding_index_spec.html">ducksemantics_embedding_index_spec</a></span><span class="op">(</span></span>
-<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">embeddings</span><span class="op">)</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">embedding_label</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
-<span>  hnsw <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_materialize_embedding_index.html">ducksemantics_materialize_embedding_index</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/ducksemantics_embedding_query.html">ducksemantics_embedding_query</a></span><span class="op">(</span></span>
-<span>  <span class="va">embeddings</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/match.html" class="external-link">match</a></span><span class="op">(</span><span class="st">"cardiomyopathy"</span>, <span class="va">embedding_terms</span><span class="op">)</span>, , drop <span class="op">=</span> <span class="cn">FALSE</span><span class="op">]</span>,</span>
-<span>  table <span class="op">=</span> <span class="va">embedding_index</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">embedding_label</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
-<span>  top_k <span class="op">=</span> <span class="fl">3</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_embedding_search.html">ducksemantics_embedding_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span><span class="co">#&gt;          subject_id subject_kind     provider              text  dim     score</span></span>
-<span><span class="co">#&gt; 1    cardiomyopathy  readme_term Rbebelm mean    cardiomyopathy 2048 1.0000000</span></span>
-<span><span class="co">#&gt; 2 diabetes mellitus  readme_term Rbebelm mean diabetes mellitus 2048 0.9355308</span></span>
-<span><span class="co">#&gt; 3          seizures  readme_term Rbebelm mean          seizures 2048 0.9351248</span></span></code></pre></div>
-<p>Late interaction uses token-level hidden states. The first implementation is an exact MaxSim reranker over stored token blocks, intended for candidate sets from aliases, FTS, graph neighborhoods, or pooled-vector search.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">token_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_token_embedding_provider.html">ducksemantics_bebel_token_embedding_provider</a></span><span class="op">(</span></span>
-<span>  <span class="va">model</span>,</span>
-<span>  label <span class="op">=</span> <span class="st">"Rbebelm token"</span>,</span>
-<span>  token_batch_size <span class="op">=</span> <span class="fl">512L</span>,</span>
-<span>  check_interrupt <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">token_batch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-token-embeddings.rds"</span><span class="op">)</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
-<span>      <span class="va">embedding_terms</span>,</span>
-<span>      provider <span class="op">=</span> <span class="va">token_provider</span>,</span>
-<span>      subject_id <span class="op">=</span> <span class="va">embedding_terms</span>,</span>
-<span>      subject_kind <span class="op">=</span> <span class="st">"readme_term"</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">token_batch</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">query_tokens</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_provider_generics.html">ducksemantics_token_embed</a></span><span class="op">(</span><span class="va">token_provider</span>, <span class="st">"short height"</span><span class="op">)</span><span class="op">[[</span><span class="fl">1L</span><span class="op">]</span><span class="op">]</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/ducksemantics_token_embedding_query.html">ducksemantics_token_embedding_query</a></span><span class="op">(</span></span>
-<span>  <span class="va">query_tokens</span><span class="op">$</span><span class="va">embeddings</span>,</span>
-<span>  provider <span class="op">=</span> <span class="st">"Rbebelm token"</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"readme_term"</span>,</span>
-<span>  top_k <span class="op">=</span> <span class="fl">3</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;ducksemantics late-interaction result&gt;</span></span>
-<span><span class="co">#&gt;   blocks: 3</span></span>
-<span><span class="co">#&gt;   top score: 0.9079</span></span></code></pre></div>
-<p>The first semantic measurement is ontology clustering: embed every HPO and MONDO label, store the vectors in DuckDB, cluster them, and compare cluster assignments against direct graph edges. The embeddings are cached in chunks because this is a real BebeLM pass over the ontology labels.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">ontology_label_terms</span> <span class="op">&lt;-</span> <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span></span>
-<span>  <span class="va">conn</span>,</span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span></span>
-<span>    <span class="st">"SELECT node_id, family, label"</span>,</span>
-<span>    <span class="st">"FROM semantic_nodes"</span>,</span>
-<span>    <span class="st">"WHERE label IS NOT NULL"</span>,</span>
-<span>    <span class="st">"ORDER BY family, node_id"</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ontology_embedding_label</span> <span class="op">&lt;-</span> <span class="st">"Rbebelm ontology label mean"</span></span>
-<span><span class="va">ontology_label_embeddings</span> <span class="op">&lt;-</span> <span class="va">ontology_label_terms</span><span class="op">$</span><span class="va">label</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_embed_cached.html">ducksemantics_embed_cached</a></span><span class="op">(</span></span>
-<span>    provider <span class="op">=</span> <span class="va">embedding_provider</span>,</span>
-<span>    cache_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-ontology-label-embeddings"</span><span class="op">)</span>,</span>
-<span>    chunk_size <span class="op">=</span> <span class="fl">1024L</span></span>
-<span>  <span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="reference/ducksemantics_embedding_batch.html">ducksemantics_embedding_batch</a></span><span class="op">(</span></span>
-<span>  embeddings <span class="op">=</span> <span class="va">ontology_label_embeddings</span>,</span>
-<span>  subject_id <span class="op">=</span> <span class="va">ontology_label_terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"node"</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">ontology_embedding_label</span>,</span>
-<span>  text <span class="op">=</span> <span class="va">ontology_label_terms</span><span class="op">$</span><span class="va">label</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_write_embeddings.html">ducksemantics_write_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">rfmalloc_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-ontology-clusters.fmalloc"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">rfmalloc_path</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">rfmalloc_runtime</span> <span class="op">&lt;-</span> <span class="fu">Rfmalloc</span><span class="fu">::</span><span class="fu"><a href="https://sounkou-bioinfo.github.io/Rfmalloc/reference/open_fmalloc.html" class="external-link">open_fmalloc</a></span><span class="op">(</span></span>
-<span>  <span class="va">rfmalloc_path</span>,</span>
-<span>  mode <span class="op">=</span> <span class="st">"scratch"</span>,</span>
-<span>  size_gb <span class="op">=</span> <span class="fl">8</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">ontology_clusters</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embedding_cluster_spec.html">ducksemantics_embedding_cluster_spec</a></span><span class="op">(</span></span>
-<span>  k <span class="op">=</span> <span class="fl">32</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">ontology_embedding_label</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"node"</span>,</span>
-<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">ontology_label_embeddings</span><span class="op">)</span>,</span>
-<span>  run_id <span class="op">=</span> <span class="st">"readme-ontology-label-clusters"</span>,</span>
-<span>  nstart <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  max_iter <span class="op">=</span> <span class="fl">30</span>,</span>
-<span>  storage <span class="op">=</span> <span class="st">"rfmalloc"</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_cluster_embeddings.html">ducksemantics_cluster_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, rfmalloc_runtime <span class="op">=</span> <span class="va">rfmalloc_runtime</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu">Rfmalloc</span><span class="fu">::</span><span class="fu"><a href="https://sounkou-bioinfo.github.io/Rfmalloc/reference/cleanup_fmalloc.html" class="external-link">cleanup_fmalloc</a></span><span class="op">(</span><span class="va">rfmalloc_runtime</span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">ontology_clusters</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/order.html" class="external-link">order</a></span><span class="op">(</span><span class="op">-</span><span class="va">ontology_clusters</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">size</span><span class="op">)</span>, <span class="op">]</span>, <span class="fl">8</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                    cluster_run_id cluster_id size  withinss mean_distance</span></span>
-<span><span class="co">#&gt; 10 readme-ontology-label-clusters         10 5176 240.93494     0.2132693</span></span>
-<span><span class="co">#&gt; 4  readme-ontology-label-clusters          4 4568 158.62406     0.1835612</span></span>
-<span><span class="co">#&gt; 9  readme-ontology-label-clusters          9 4028 243.59611     0.2439811</span></span>
-<span><span class="co">#&gt; 18 readme-ontology-label-clusters         18 3535 232.95918     0.2552565</span></span>
-<span><span class="co">#&gt; 29 readme-ontology-label-clusters         29 3523 230.87402     0.2542924</span></span>
-<span><span class="co">#&gt; 15 readme-ontology-label-clusters         15 3447 185.65704     0.2303807</span></span>
-<span><span class="co">#&gt; 21 readme-ontology-label-clusters         21 3386 169.69024     0.2208094</span></span>
-<span><span class="co">#&gt; 25 readme-ontology-label-clusters         25 2999  85.37741     0.1647605</span></span>
-<span><span class="fu"><a href="reference/ducksemantics_embedding_cluster_graph_agreement.html">ducksemantics_embedding_cluster_graph_agreement</a></span><span class="op">(</span></span>
-<span>  <span class="va">conn</span>,</span>
-<span>  <span class="va">ontology_clusters</span><span class="op">$</span><span class="va">cluster_run_id</span>,</span>
-<span>  predicates <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"is_a"</span>, <span class="st">"part_of"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span><span class="co">#&gt;                   cluster_run_id edge_count same_cluster_edges same_cluster_rate</span></span>
-<span><span class="co">#&gt; 1 readme-ontology-label-clusters      68994              24055         0.3486535</span></span></code></pre></div>
-<p>BebeLM judgment uses the same provider interface. The parser here accepts BebeLM tool calls and JSON judgment payloads, then returns the rows expected by the semantic store.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">judgment_mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>  mention_id <span class="op">=</span> <span class="st">"readme-judgment:000001"</span>,</span>
-<span>  node_id <span class="op">=</span> <span class="st">"HP:0004322"</span>,</span>
-<span>  span <span class="op">=</span> <span class="st">"short stature"</span>,</span>
-<span>  start_offset <span class="op">=</span> <span class="fl">26L</span>,</span>
-<span>  end_offset <span class="op">=</span> <span class="fl">39L</span>,</span>
-<span>  score <span class="op">=</span> <span class="fl">1</span>,</span>
-<span>  alias <span class="op">=</span> <span class="st">"short stature"</span>,</span>
-<span>  alias_kind <span class="op">=</span> <span class="st">"label"</span>,</span>
-<span>  source <span class="op">=</span> <span class="st">"hp.obo"</span>,</span>
-<span>  stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">judgment_instructions</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  <span class="st">"You adjudicate deterministic semantic grounding candidates."</span>,</span>
-<span>  <span class="st">"Return only JSON: an array of objects with mention_id, decision, confidence, evidence_span, short_reason."</span>,</span>
-<span>  <span class="st">"Use keep for a supported patient finding. Never invent identifiers."</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">judgment</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_cache_rds.html">ducksemantics_cache_rds</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">cache_dir</span>, <span class="st">"readme-bebel-judgment.rds"</span><span class="op">)</span>,</span>
-<span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://sounkou-bioinfo.github.io/Rbebelm/reference/bebel_agent.html" class="external-link">bebel_agent</a></span><span class="op">(</span><span class="va">model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">96</span>, max_think <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
-<span>    <span class="fu"><a href="reference/ducksemantics_bebel_judge.html">ducksemantics_bebel_judge</a></span><span class="op">(</span></span>
-<span>      <span class="va">agent</span>,</span>
-<span>      <span class="st">"The proband presents with short stature."</span>,</span>
-<span>      <span class="va">judgment_mentions</span>,</span>
-<span>      instructions <span class="op">=</span> <span class="va">judgment_instructions</span>,</span>
-<span>      parser <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_bebel_tool_judgment_parser.html">ducksemantics_bebel_tool_judgment_parser</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>      record <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>    <span class="op">)</span></span>
-<span>  <span class="op">}</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">judgment</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"subject_id"</span>, <span class="st">"object_id"</span>, <span class="st">"decision"</span>, <span class="st">"confidence"</span>, <span class="st">"model"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;               subject_id  object_id decision confidence   model</span></span>
-<span><span class="co">#&gt; 1 readme-judgment:000001 HP:0004322     keep          1 Rbebelm</span></span></code></pre></div>
-<p>Benchmarks are ordinary R data flowing through pipes. The metrics below use gold HPO phenotypes and expose the current lexical baseline before model judgment removes negated or disease-level mentions.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">suite</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_benchmark_cases.html">ducksemantics_benchmark_cases</a></span><span class="op">(</span></span>
-<span>  cases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
-<span>    text <span class="op">=</span> <span class="va">note</span>,</span>
-<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  gold <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span>
-<span>    case_id <span class="op">=</span> <span class="st">"readme-case-001"</span>,</span>
-<span>    node_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HP:0001263"</span>, <span class="st">"HP:0001250"</span>, <span class="st">"HP:0004322"</span>, <span class="st">"HP:0001638"</span><span class="op">)</span>,</span>
-<span>    stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  suite <span class="op">=</span> <span class="st">"readme-hpo-mondo"</span>,</span>
-<span>  source <span class="op">=</span> <span class="st">"README.Rmd"</span>,</span>
-<span>  version <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"%Y-%m-%d"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="va">suite</span> <span class="op">|&gt;</span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_benchmark.html">ducksemantics_benchmark</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">result</span></span>
-<span><span class="co">#&gt; &lt;ducksemantics benchmark&gt;</span></span>
-<span><span class="co">#&gt;   suite: readme-hpo-mondo</span></span>
-<span><span class="co">#&gt;   task: grounding</span></span>
-<span><span class="co">#&gt;   cases: 1</span></span>
-<span><span class="co">#&gt;   elapsed: 0.172 s</span></span>
-<span><span class="co">#&gt;   F1: 0.727</span></span>
-<span><span class="va">result</span><span class="op">$</span><span class="va">summary</span></span>
-<span><span class="co">#&gt;              suite      task case_count gold_count prediction_count elapsed_seconds</span></span>
-<span><span class="co">#&gt; 1 readme-hpo-mondo grounding          1          4               13           0.172</span></span>
-<span><span class="co">#&gt;   case_seconds token_count tokens_per_second cases_per_second prediction_bytes</span></span>
-<span><span class="co">#&gt; 1        0.169          15           87.2093         5.813953             6152</span></span>
-<span><span class="va">result</span><span class="op">$</span><span class="va">metrics</span></span>
-<span><span class="co">#&gt;     by tp fp fn precision recall        f1</span></span>
-<span><span class="co">#&gt; 1 node  4  3  0 0.5714286      1 0.7272727</span></span>
-<span><span class="va">result</span><span class="op">$</span><span class="va">timings</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"case_id"</span>, <span class="st">"seconds"</span>, <span class="st">"token_count"</span>, <span class="st">"gold_count"</span>, <span class="st">"prediction_count"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;           case_id seconds token_count gold_count prediction_count</span></span>
-<span><span class="co">#&gt; 1 readme-case-001   0.169          15          4               13</span></span></code></pre></div>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">conn</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">judgments</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_judge.html">ducksemantics_bebel_judge</a></span><span class="op">(</span></span>
+<span>  <span class="va">agent</span>,</span>
+<span>  text <span class="op">=</span> <span class="st">"The proband has short stature and no diabetes mellitus."</span>,</span>
+<span>  mentions <span class="op">=</span> <span class="va">mentions</span>,</span>
+<span>  conn <span class="op">=</span> <span class="va">conn</span>,</span>
+<span>  parser <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_bebel_tool_judgment_parser.html">ducksemantics_bebel_tool_judgment_parser</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  model <span class="op">=</span> <span class="st">"LFM2.5-8B-A1B"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
 </div>
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
@@ -462,7 +216,7 @@
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer>

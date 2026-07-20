@@ -15,8 +15,6 @@ DucksemanticsTokenEmbeddingBatch(
   token = NULL,
   start_offset = NULL,
   end_offset = NULL,
-  storage = character(0),
-  storage_ref = NULL,
   attrs = NULL
 )
 ```
@@ -57,16 +55,6 @@ DucksemanticsTokenEmbeddingBatch(
 
   Optional zero-based source offsets.
 
-- storage:
-
-  Storage label. `"duckdb_float_array"` means `embedding` stores each
-  token row directly in DuckDB. `"rfmalloc_slab"` is reserved for native
-  slabs addressed by `storage_ref`.
-
-- storage_ref:
-
-  Optional native storage reference.
-
 - attrs:
 
   Optional JSON text or other metadata for each token row.
@@ -74,3 +62,8 @@ DucksemanticsTokenEmbeddingBatch(
 ## Value
 
 A `DucksemanticsTokenEmbeddingBatch` object.
+
+## Details
+
+Token vectors are always persisted as DuckDB `FLOAT[]` rows. This makes
+the index durable and queryable without an external allocator.

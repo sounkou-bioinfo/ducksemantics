@@ -9,8 +9,3 @@ token-embedding object per input text. Each object contains an
 ``` r
 DucksemanticsTokenEmbeddingProvider
 ```
-
-## Format
-
-An object of class `s7contract::s7_interface` (inherits from
-`S7_object`) of length 1.

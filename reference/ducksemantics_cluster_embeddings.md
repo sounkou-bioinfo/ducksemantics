@@ -12,8 +12,7 @@ ducksemantics_cluster_embeddings(
   spec,
   conn,
   prefix = "semantic",
-  replace = TRUE,
-  rfmalloc_runtime = NULL
+  replace = TRUE
 )
 ```
 
@@ -35,10 +34,6 @@ ducksemantics_cluster_embeddings(
 - replace:
 
   Delete rows for `spec$run_id` before writing?
-
-- rfmalloc_runtime:
-
-  Optional Rfmalloc runtime used when `storage = "rfmalloc"`.
 
 ## Value
 

@@ -1,8 +1,8 @@
 # Cache provider embeddings in durable chunks
 
-This is the embedding cache used for large ontology passes. Each chunk
-is written after it finishes, so interrupted runs can resume without
-discarding completed BebeLM work.
+This cache is used for large ontology passes. Each chunk is written
+after it finishes, so interrupted runs can resume without discarding
+completed native retrieval-encoder work.
 
 ## Usage
 

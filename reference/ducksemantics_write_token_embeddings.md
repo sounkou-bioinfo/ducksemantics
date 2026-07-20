@@ -1,9 +1,9 @@
 # Store token embeddings for late-interaction scoring
 
-Token embeddings are grouped by `block_id`, so a later native scorer can
-compare query-token and document-token matrices without changing the
-graph schema. The first active embedding path remains pooled vectors in
-`semantic_embeddings`.
+Native ColBERT document vectors are grouped by `block_id`, so exact
+MaxSim can compare a query-token matrix to a stored candidate matrix
+without changing the graph schema. Dense vectors in
+`semantic_embeddings` remain the inexpensive broad-retrieval layer.
 
 ## Usage
 

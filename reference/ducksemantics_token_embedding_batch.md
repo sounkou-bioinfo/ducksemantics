@@ -15,8 +15,6 @@ ducksemantics_token_embedding_batch(
   token = NULL,
   start_offset = NULL,
   end_offset = NULL,
-  storage = c("duckdb_float_array", "rfmalloc_slab"),
-  storage_ref = NULL,
   attrs = NULL
 )
 ```
@@ -56,16 +54,6 @@ ducksemantics_token_embedding_batch(
 - start_offset, end_offset:
 
   Optional zero-based source offsets.
-
-- storage:
-
-  Storage label. `"duckdb_float_array"` means `embedding` stores each
-  token row directly in DuckDB. `"rfmalloc_slab"` is reserved for native
-  slabs addressed by `storage_ref`.
-
-- storage_ref:
-
-  Optional native storage reference.
 
 - attrs:
 

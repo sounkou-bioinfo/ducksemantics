@@ -14,8 +14,7 @@ ducksemantics_embedding_cluster_spec(
   run_id = NULL,
   seed = 1L,
   nstart = 10L,
-  max_iter = 100L,
-  storage = c("r", "rfmalloc")
+  max_iter = 100L
 )
 ```
 
@@ -58,8 +57,3 @@ ducksemantics_embedding_cluster_spec(
 - max_iter:
 
   Maximum k-means iterations.
-
-- storage:
-
-  Matrix storage for the clustering pass. `"r"` uses an ordinary R
-  matrix. `"rfmalloc"` allocates the working matrix through Rfmalloc.
