@@ -4,10 +4,10 @@ Title: DuckDB-Native Semantic Graph Grounding
 Version: 0.0.0.9000
 Authors@R: c(
     person(given = "Sounkou Mahamane", family = "Toure",
-           email = "sounkoutoure@gmail.com", role = c("aut", "cre"))
+           email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
+    person(given = "Human Phenotype Ontology", role = "cph",
+           comment = "Bundled README fixture (CC BY 4.0)")
     )
-Author: Sounkou Mahamane Toure [aut, cre]
-Maintainer: Sounkou Mahamane Toure <sounkoutoure@gmail.com>
 Description: DuckDB-native semantic graph grounding over arbitrary concept
     graphs. The package owns graph schema creation, alias indexing, lexical
     mention grounding, transitive graph closure, 'EmbeddingGemma' dense
@@ -15,7 +15,7 @@ Description: DuckDB-native semantic graph grounding over arbitrary concept
     HPO, MONDO, ORPHANET, memory graphs, and run ledgers are graph sources, not
     special package APIs.
 License: MIT + file LICENSE
-URL: https://github.com/sounkou-bioinfo/ducksemantics, https://sounkou-bioinfo.github.io/ducksemantics
+URL: https://github.com/sounkou-bioinfo/ducksemantics, https://sounkou-bioinfo.github.io/ducksemantics/
 BugReports: https://github.com/sounkou-bioinfo/ducksemantics/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

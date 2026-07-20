@@ -14,7 +14,7 @@ model judgment prompts over deterministic candidates.
 Useful links:
 \itemize{
   \item \url{https://github.com/sounkou-bioinfo/ducksemantics}
-  \item \url{https://sounkou-bioinfo.github.io/ducksemantics}
+  \item \url{https://sounkou-bioinfo.github.io/ducksemantics/}
   \item Report bugs at \url{https://github.com/sounkou-bioinfo/ducksemantics/issues}
 }
 
@@ -25,6 +25,11 @@ Useful links:
 Authors:
 \itemize{
   \item Sounkou Mahamane Toure \email{sounkoutoure@gmail.com}
+}
+
+Other contributors:
+\itemize{
+  \item Human Phenotype Ontology (Bundled README fixture (CC BY 4.0)) [copyright holder]
 }
 
 }

@@ -1,0 +1,10 @@
+# Bundled data notices
+
+## HPO README fixture
+
+`extdata/hpo-readme.obo` is a small derived fixture containing selected term
+identifiers, labels, aliases, definitions, and relationships from the Human
+Phenotype Ontology (HPO), <https://hpo.jax.org/>. It is included solely to run
+the README without a network download. HPO is available under the Creative
+Commons Attribution 4.0 International license (CC BY 4.0); see
+<https://hpo.jax.org/app/license>.

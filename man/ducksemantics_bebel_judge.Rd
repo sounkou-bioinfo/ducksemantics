@@ -14,6 +14,7 @@ ducksemantics_bebel_judge(
   instructions = ducksemantics_default_judgment_instructions(),
   parser = ducksemantics_json_judgment_parser(),
   on_event = NULL,
+  max_retries = 1L,
   record = !is.null(conn),
   model = "Rbebelm"
 )
@@ -39,12 +40,17 @@ policy.}
 
 \item{on_event}{Optional Rbebelm event handler.}
 
+\item{max_retries}{Number of corrective turns after a response fails the
+strict \code{DucksemanticsJudgmentParser} contract. Each parse error is appended
+to the same BebeLM transcript as a user turn; it is never silently coerced.}
+
 \item{record}{Append judgments to the judgment table?}
 
 \item{model}{Model label recorded with judgments.}
 }
 \value{
-A data frame of judgment rows.
+A data frame of judgment rows. Its \code{responses} and \code{parse_errors}
+attributes retain every model response and corrective parse error.
 }
 \description{
 Judge mentions with a BebeLM/Rbebelm agent

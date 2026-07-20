@@ -269,6 +269,17 @@ ducksemantics_bebel_tool_judgment_parser_class <- S7::new_class(
   )
 )
 
+# Internal typed hand-off between the strict S7 parser contract and a BebeLM
+# repair turn. It is intentionally not a permissive alternate response shape.
+ducksemantics_judgment_parse_error_class <- S7::new_class(
+  "ducksemantics_judgment_parse_error",
+  package = "ducksemantics",
+  properties = list(
+    message = ducksemantics_text_property,
+    response = ducksemantics_text_property
+  )
+)
+
 ducksemantics_lexical_annotator_class <- S7::new_class(
   "ducksemantics_lexical_annotator",
   package = "ducksemantics"

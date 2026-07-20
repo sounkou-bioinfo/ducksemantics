@@ -652,7 +652,10 @@ ducksemantics_annotate <- function(conn,
 ducksemantics_default_judgment_instructions <- function() {
   paste(
     "You adjudicate deterministic semantic grounding candidates.",
-    "Return only JSON: an array of objects with mention_id, decision, confidence, patient_context, evidence_span, short_reason, and optional replacement_node_id.",
+    "Return exactly one valid top-level JSON array and nothing before or after it. Its first character must be [ and its final character must be ].",
+    "Return exactly one result for every CANDIDATES_JSON row, in the same order.",
+    "Every result must copy its candidate mention_id exactly and include mention_id, decision, confidence, patient_context, evidence_span, short_reason, and optional replacement_node_id.",
+    "For example, a candidate with mention_id m1 requires an array beginning [{\"mention_id\":\"m1\",...}]. Do not wrap results in candidates_json or any other named object.",
     "decision must be one of keep, drop, replace, enrich.",
     "Use drop for negated, uncertain, family-history-only, not-about-the-subject, duplicate, or unsupported mentions.",
     "Never invent identifiers; replacements must come from supplied candidates or graph context.",
@@ -782,9 +785,13 @@ ducksemantics_judge <- function(text,
 #'   policy.
 #' @param parser Object implementing [DucksemanticsJudgmentParser].
 #' @param on_event Optional Rbebelm event handler.
+#' @param max_retries Number of corrective turns after a response fails the
+#'   strict `DucksemanticsJudgmentParser` contract. Each parse error is appended
+#'   to the same BebeLM transcript as a user turn; it is never silently coerced.
 #' @param record Append judgments to the judgment table?
 #' @param model Model label recorded with judgments.
-#' @return A data frame of judgment rows.
+#' @return A data frame of judgment rows. Its `responses` and `parse_errors`
+#'   attributes retain every model response and corrective parse error.
 #' @export
 ducksemantics_bebel_judge <- function(agent,
                                       text,
@@ -795,23 +802,63 @@ ducksemantics_bebel_judge <- function(agent,
                                       instructions = ducksemantics_default_judgment_instructions(),
                                       parser = ducksemantics_json_judgment_parser(),
                                       on_event = NULL,
+                                      max_retries = 1L,
                                       record = !is.null(conn),
                                       model = "Rbebelm") {
   if (!requireNamespace("Rbebelm", quietly = TRUE)) {
     stop("Rbebelm is required for BebeLM judgment.", call. = FALSE)
   }
-  ducksemantics_judge(
+  S7::prop(DucksemanticsScalarText(value = text), "value")
+  s7contract::assert_implements(parser, DucksemanticsJudgmentParser, arg = "parser")
+  S7::prop(DucksemanticsFlag(value = record), "value")
+  S7::prop(DucksemanticsScalarText(value = model), "value")
+  if (length(max_retries) != 1L || is.na(max_retries) || max_retries < 0L ||
+    max_retries != as.integer(max_retries)) {
+    stop("`max_retries` must be a non-negative integer scalar.", call. = FALSE)
+  }
+
+  initial_prompt <- ducksemantics_judgment_prompt(
     text = text,
     mentions = mentions,
-    runner = ducksemantics_bebel_runner(agent, on_event = on_event),
-    conn = conn,
-    prefix = prefix,
     graph_context = graph_context,
-    instructions = instructions,
-    parser = parser,
-    record = record,
-    model = model
+    instructions = instructions
   )
+  runner <- ducksemantics_bebel_runner(agent, on_event = on_event)
+  prompt <- initial_prompt
+  responses <- character()
+  parse_errors <- list()
+
+  for (attempt in 0L:as.integer(max_retries)) {
+    response <- ducksemantics_run(runner, prompt)
+    responses <- c(responses, response)
+    result <- tryCatch({
+      parsed <- ducksemantics_parse(parser, response)
+      ducksemantics_judgments_from_model(parsed, mentions, model = model)
+    }, error = function(error) error)
+    if (!inherits(result, "error")) {
+      attr(result, "prompt") <- initial_prompt
+      attr(result, "response") <- response
+      attr(result, "responses") <- responses
+      attr(result, "parse_errors") <- parse_errors
+      if (isTRUE(record)) {
+        if (is.null(conn)) stop("`conn` is required when `record = TRUE`.", call. = FALSE)
+        ducksemantics_record_judgments(conn, result, prefix = prefix)
+      }
+      return(result)
+    }
+
+    parse_error <- ducksemantics_judgment_parse_error(result, response)
+    parse_errors[[length(parse_errors) + 1L]] <- parse_error
+    if (attempt >= as.integer(max_retries)) {
+      stop(
+        "BebeLM response failed the judgment parser after ",
+        length(responses), " attempt(s): ", S7::prop(parse_error, "message"),
+        call. = FALSE
+      )
+    }
+    prompt <- ducksemantics_bebel_parse_repair_prompt(parse_error)
+  }
+  stop("Unreachable BebeLM judgment retry state.", call. = FALSE)
 }
 
 #' Record semantic judgments
@@ -2171,6 +2218,28 @@ ducksemantics_prompt_text <- function(x, arg) {
   x
 }
 
+ducksemantics_judgment_parse_error <- function(error, response) {
+  ducksemantics_judgment_parse_error_class(
+    message = conditionMessage(error),
+    response = ducksemantics_response_text(response)
+  )
+}
+
+ducksemantics_bebel_parse_repair_prompt <- function(parse_error) {
+  if (!S7::S7_inherits(parse_error, ducksemantics_judgment_parse_error_class)) {
+    stop("`parse_error` must be a Ducksemantics judgment parse error.", call. = FALSE)
+  }
+  paste(
+    "Your preceding response failed the required semantic-judgment JSON contract.",
+    paste0("PARSE_ERROR: ", S7::prop(parse_error, "message")),
+    "The source text and CANDIDATES_JSON are in the immediately preceding user turn.",
+    "Return a corrected response only: its first character must be [ and its final character must be ].",
+    "Do not use candidates_json, CANDIDATES_JSON, judgments, results, or any other top-level wrapper key.",
+    "The array must have exactly one object per candidate, in candidate order; every object must copy that candidate's mention_id exactly and include decision.",
+    sep = "\n"
+  )
+}
+
 ducksemantics_response_text <- function(x) {
   if (is.character(x) && length(x) == 1L && !is.na(x)) {
     return(x)
@@ -2210,7 +2279,13 @@ ducksemantics_normalize_judgment_payload <- function(parsed) {
         return(ducksemantics_normalize_judgment_payload(parsed[[wrapper]]))
       }
     }
-    return(as.data.frame(parsed, stringsAsFactors = FALSE))
+    if (all(c("mention_id", "decision") %in% names(parsed))) {
+      return(ducksemantics_lists_to_data_frame(list(parsed)))
+    }
+    stop(
+      "JSON judgment payload must be an array, a documented wrapper, or one object with mention_id and decision.",
+      call. = FALSE
+    )
   }
   parsed
 }

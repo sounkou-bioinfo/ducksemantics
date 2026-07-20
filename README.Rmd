@@ -6,6 +6,13 @@ output: github_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+
+embeddinggemma_weights <- Sys.getenv("EMBEDDING_GEMMA_WEIGHTS_FILE")
+colbert_weights <- Sys.getenv("COLBERT_WEIGHTS_FILE")
+bebel_weights <- Sys.getenv("BEBELM_WEIGHTS_FILE")
+have_embeddinggemma <- file.exists(embeddinggemma_weights)
+have_colbert <- file.exists(colbert_weights)
+have_bebel <- file.exists(bebel_weights)
 ```
 
 # ducksemantics
@@ -29,11 +36,19 @@ schema, not special-purpose APIs.
 
 ## Build a semantic graph
 
-```{r graph, eval=FALSE}
+The bundled HPO fixture is a small, attribution-preserving subset of the real
+Human Phenotype Ontology. It keeps the README executable without downloading an
+ontology during rendering.
+
+```{r graph}
 library(ducksemantics)
 
-conn <- ducksemantics_connect("semantic.duckdb")
-hpo <- ducksemantics_read_obo("hp.obo", family = "HPO", source = "hp.obo")
+conn <- ducksemantics_connect()
+hpo <- ducksemantics_read_obo(
+  system.file("extdata", "hpo-readme.obo", package = "ducksemantics", mustWork = TRUE),
+  family = "HPO",
+  source = "HPO README fixture"
+)
 ducksemantics_write_graph(
   conn,
   nodes = hpo$nodes,
@@ -44,25 +59,28 @@ ducksemantics_write_graph(
 
 # Deterministic, explainable candidates. This intentionally includes negated
 # mentions; BebeLM judgment decides whether the mention is a patient finding.
+case_text <- "The proband has short stature and seizures but no diabetes mellitus."
 mentions <- ducksemantics_annotate(
   conn,
-  "The proband has short stature and seizures but no diabetes mellitus.",
+  case_text,
   document_id = "case-001"
 )
+mentions
 ```
 
 ## Dense retrieval with EmbeddingGemma
 
 Use a retrieval-trained dense encoder for broad candidate generation. Choose an
 EmbeddingGemma task deliberately: vectors are only comparable when they use a
-compatible prompt contract.
+compatible prompt contract. This chunk executes a real native encoder when
+`EMBEDDING_GEMMA_WEIGHTS_FILE` names a local GGUF.
 
-```{r dense, eval=FALSE}
+```{r dense, eval=have_embeddinggemma}
 library(Rbebelm)
 
 embedding_model <- embeddinggemma_model_load(
-  Sys.getenv("EMBEDDING_GEMMA_WEIGHTS_FILE"),
-  num_threads = 8
+  embeddinggemma_weights,
+  num_threads = 2
 )
 dense_provider <- ducksemantics_embeddinggemma_provider(
   embedding_model,
@@ -75,7 +93,7 @@ terms <- DBI::dbGetQuery(conn, "SELECT node_id, label FROM semantic_nodes WHERE 
 vectors <- ducksemantics_embed_cached(
   terms$label,
   provider = dense_provider,
-  cache_dir = "embeddinggemma-hpo-cache"
+  cache_dir = file.path(tempdir(), "ducksemantics-embeddinggemma-hpo-cache")
 )
 ducksemantics_embedding_batch(
   vectors,
@@ -85,13 +103,15 @@ ducksemantics_embedding_batch(
   text = terms$label
 ) |> ducksemantics_write_embeddings(conn, replace = TRUE)
 
-# An HNSW index is optional. Exact DuckDB vector search also works.
-dense_index <- ducksemantics_embedding_index_spec(
-  dimensions = ncol(vectors),
+# Exact DuckDB vector search is sufficient for this small example. An HNSW
+# index is optional for a larger dense candidate collection.
+dense_hits <- ducksemantics_embedding_query(
+  ducksemantics_embed(dense_provider, "short height")[1L, ],
   provider = "embeddinggemma-hpo-v1",
   subject_kind = "hpo_term",
-  hnsw = TRUE
-) |> ducksemantics_materialize_embedding_index(conn)
+  top_k = 3L
+) |> ducksemantics_embedding_search(conn)
+dense_hits
 ```
 
 ## Exact late interaction with native ColBERT
@@ -100,33 +120,36 @@ ColBERT document vectors are persisted once. A query is encoded with its own
 native query contract; the DuckDB reranker computes the exact MaxSim sum over
 the stored document vectors. For a very large corpus, use dense HNSW, lexical,
 or graph candidates first, then restrict `candidate_subject_id` for the MaxSim
-pass.
+pass. The chunk is evaluated during every render and runs the real native model
+when `COLBERT_WEIGHTS_FILE` names a local GGUF.
 
-```{r colbert, eval=FALSE}
-colbert_model <- colbert_model_load(
-  Sys.getenv("COLBERT_WEIGHTS_FILE"),
-  num_threads = 8
-)
-colbert_documents <- ducksemantics_colbert_provider(
-  colbert_model,
-  role = "document",
-  label = "lfm2.5-colbert-350m-q4km"
-)
+```{r colbert}
+if (have_colbert) {
+  colbert_model <- colbert_model_load(colbert_weights, num_threads = 2)
+  colbert_documents <- ducksemantics_colbert_provider(
+    colbert_model,
+    role = "document",
+    label = "lfm2.5-colbert-350m-q4km"
+  )
 
-ducksemantics_token_embedding_batch_from_provider(
-  terms$label,
-  provider = colbert_documents,
-  subject_id = terms$node_id,
-  subject_kind = "hpo_term"
-) |> ducksemantics_write_token_embeddings(conn, replace = TRUE)
+  ducksemantics_token_embedding_batch_from_provider(
+    terms$label,
+    provider = colbert_documents,
+    subject_id = terms$node_id,
+    subject_kind = "hpo_term"
+  ) |> ducksemantics_write_token_embeddings(conn, replace = TRUE)
 
-hits <- ducksemantics_colbert_query(
-  colbert_model,
-  "developmental delay with seizures",
-  provider = "lfm2.5-colbert-350m-q4km",
-  subject_kind = "hpo_term",
-  top_k = 25L
-) |> ducksemantics_late_interaction_search(conn)
+  hits <- ducksemantics_colbert_query(
+    colbert_model,
+    "developmental delay with seizures",
+    provider = "lfm2.5-colbert-350m-q4km",
+    subject_kind = "hpo_term",
+    top_k = 25L
+  ) |> ducksemantics_late_interaction_search(conn)
+  hits
+} else {
+  message("Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example.")
+}
 ```
 
 The token rows contain native 128-dimensional ColBERT document vectors, not
@@ -138,18 +161,24 @@ stage, but it does not implement variable-length ColBERT MaxSim.
 The final local LLM stage only receives candidates and context already grounded
 by deterministic retrieval. Its structured response can drop negated,
 uncertain, historical, or wrong-subject mentions; it may only replace a concept
-with an explicitly supplied candidate or graph neighbor.
+with an explicitly supplied candidate or graph neighbor. This chunk executes a
+real BebeLM call when `BEBELM_WEIGHTS_FILE` names a local GGUF.
 
-```{r judge, eval=FALSE}
-generation_model <- bebel_model_load(Sys.getenv("BEBELM_WEIGHTS_FILE"), num_threads = 8)
-agent <- bebel_agent(generation_model, greedy = TRUE, max_gen = 192L, max_think = 0L)
+```{r judge, eval=have_bebel}
+generation_model <- bebel_model_load(bebel_weights, num_threads = 2)
+agent <- bebel_agent(generation_model, greedy = TRUE, max_gen = 256L, max_think = 0L)
 
 judgments <- ducksemantics_bebel_judge(
   agent,
-  text = "The proband has short stature and no diabetes mellitus.",
+  text = case_text,
   mentions = mentions,
   conn = conn,
   parser = ducksemantics_bebel_tool_judgment_parser(),
   model = "LFM2.5-8B-A1B"
 )
+judgments
+```
+
+```{r cleanup, include=FALSE}
+DBI::dbDisconnect(conn, shutdown = TRUE)
 ```

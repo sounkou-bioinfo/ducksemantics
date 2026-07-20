@@ -134,6 +134,16 @@ if (requireNamespace("Rbebelm", quietly = TRUE)) {
   )
   expect_equal(parsed_json_call$mention_id, "m2")
   expect_equal(parsed_json_call$decision, "drop")
+
+  expect_error(
+    ducksemantics_parse(
+      ducksemantics_json_judgment_parser(),
+      paste0(
+        "{\"m3\":{\"mention_id\":\"m3\",\"decision\":\"keep\"},",
+        "\"m4\":{\"mention_id\":\"m4\",\"decision\":\"drop\"}}"
+      )
+    )
+  )
 }
 
 obo_path <- tempfile(fileext = ".obo")
