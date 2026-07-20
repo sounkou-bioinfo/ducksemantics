@@ -63,11 +63,16 @@
 <div class="section level2">
 <h2 id="build-a-semantic-graph">Build a semantic graph<a class="anchor" aria-label="anchor" href="#build-a-semantic-graph"></a>
 </h2>
+<p>The bundled HPO fixture is a small, attribution-preserving subset of the real Human Phenotype Ontology. It keeps the README executable without downloading an ontology during rendering.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link">ducksemantics</a></span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="st">"semantic.duckdb"</span><span class="op">)</span></span>
-<span><span class="va">hpo</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span><span class="st">"hp.obo"</span>, family <span class="op">=</span> <span class="st">"HPO"</span>, source <span class="op">=</span> <span class="st">"hp.obo"</span><span class="op">)</span></span>
+<span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">hpo</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_read_obo.html">ducksemantics_read_obo</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"hpo-readme.obo"</span>, package <span class="op">=</span> <span class="st">"ducksemantics"</span>, mustWork <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>  family <span class="op">=</span> <span class="st">"HPO"</span>,</span>
+<span>  source <span class="op">=</span> <span class="st">"HPO README fixture"</span></span>
+<span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/ducksemantics_write_graph.html">ducksemantics_write_graph</a></span><span class="op">(</span></span>
 <span>  <span class="va">conn</span>,</span>
 <span>  nodes <span class="op">=</span> <span class="va">hpo</span><span class="op">$</span><span class="va">nodes</span>,</span>
@@ -78,22 +83,33 @@
 <span></span>
 <span><span class="co"># Deterministic, explainable candidates. This intentionally includes negated</span></span>
 <span><span class="co"># mentions; BebeLM judgment decides whether the mention is a patient finding.</span></span>
+<span><span class="va">case_text</span> <span class="op">&lt;-</span> <span class="st">"The proband has short stature and seizures but no diabetes mellitus."</span></span>
 <span><span class="va">mentions</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_annotate.html">ducksemantics_annotate</a></span><span class="op">(</span></span>
 <span>  <span class="va">conn</span>,</span>
-<span>  <span class="st">"The proband has short stature and seizures but no diabetes mellitus."</span>,</span>
+<span>  <span class="va">case_text</span>,</span>
 <span>  document_id <span class="op">=</span> <span class="st">"case-001"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span><span class="op">)</span></span>
+<span><span class="va">mentions</span></span>
+<span><span class="co">#&gt;   document_id      mention_id    node_id          span start_offset end_offset</span></span>
+<span><span class="co">#&gt; 1    case-001 case-001:000017 HP:0004322 short stature           16         29</span></span>
+<span><span class="co">#&gt; 2    case-001 case-001:000031 HP:0001250      seizures           34         42</span></span>
+<span><span class="co">#&gt;   score        method attrs trust         alias    alias_kind</span></span>
+<span><span class="co">#&gt; 1  1.00 lexical_alias  &lt;NA&gt;  &lt;NA&gt; Short stature         label</span></span>
+<span><span class="co">#&gt; 2  0.95 lexical_alias  &lt;NA&gt;  &lt;NA&gt;      Seizures synonym:exact</span></span>
+<span><span class="co">#&gt;               source</span></span>
+<span><span class="co">#&gt; 1 HPO README fixture</span></span>
+<span><span class="co">#&gt; 2 HPO README fixture</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="dense-retrieval-with-embeddinggemma">Dense retrieval with EmbeddingGemma<a class="anchor" aria-label="anchor" href="#dense-retrieval-with-embeddinggemma"></a>
 </h2>
-<p>Use a retrieval-trained dense encoder for broad candidate generation. Choose an EmbeddingGemma task deliberately: vectors are only comparable when they use a compatible prompt contract.</p>
+<p>Use a retrieval-trained dense encoder for broad candidate generation. Choose an EmbeddingGemma task deliberately: vectors are only comparable when they use a compatible prompt contract. This chunk executes a real native encoder when <code>EMBEDDING_GEMMA_WEIGHTS_FILE</code> names a local GGUF.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">Rbebelm</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">embedding_model</span> <span class="op">&lt;-</span> <span class="fu">embeddinggemma_model_load</span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"EMBEDDING_GEMMA_WEIGHTS_FILE"</span><span class="op">)</span>,</span>
-<span>  num_threads <span class="op">=</span> <span class="fl">8</span></span>
+<span>  <span class="va">embeddinggemma_weights</span>,</span>
+<span>  num_threads <span class="op">=</span> <span class="fl">2</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">dense_provider</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embeddinggemma_provider.html">ducksemantics_embeddinggemma_provider</a></span><span class="op">(</span></span>
 <span>  <span class="va">embedding_model</span>,</span>
@@ -106,7 +122,7 @@
 <span><span class="va">vectors</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embed_cached.html">ducksemantics_embed_cached</a></span><span class="op">(</span></span>
 <span>  <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
 <span>  provider <span class="op">=</span> <span class="va">dense_provider</span>,</span>
-<span>  cache_dir <span class="op">=</span> <span class="st">"embeddinggemma-hpo-cache"</span></span>
+<span>  cache_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"ducksemantics-embeddinggemma-hpo-cache"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/ducksemantics_embedding_batch.html">ducksemantics_embedding_batch</a></span><span class="op">(</span></span>
 <span>  <span class="va">vectors</span>,</span>
@@ -116,61 +132,93 @@
 <span>  text <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">label</span></span>
 <span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_embeddings.html">ducksemantics_write_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># An HNSW index is optional. Exact DuckDB vector search also works.</span></span>
-<span><span class="va">dense_index</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embedding_index_spec.html">ducksemantics_embedding_index_spec</a></span><span class="op">(</span></span>
-<span>  dimensions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">vectors</span><span class="op">)</span>,</span>
+<span><span class="co"># Exact DuckDB vector search is sufficient for this small example. An HNSW</span></span>
+<span><span class="co"># index is optional for a larger dense candidate collection.</span></span>
+<span><span class="va">dense_hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_embedding_query.html">ducksemantics_embedding_query</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="reference/ducksemantics_provider_generics.html">ducksemantics_embed</a></span><span class="op">(</span><span class="va">dense_provider</span>, <span class="st">"short height"</span><span class="op">)</span><span class="op">[</span><span class="fl">1L</span>, <span class="op">]</span>,</span>
 <span>  provider <span class="op">=</span> <span class="st">"embeddinggemma-hpo-v1"</span>,</span>
 <span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
-<span>  hnsw <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_materialize_embedding_index.html">ducksemantics_materialize_embedding_index</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span></code></pre></div>
+<span>  top_k <span class="op">=</span> <span class="fl">3L</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_embedding_search.html">ducksemantics_embedding_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
+<span><span class="va">dense_hits</span></span>
+<span><span class="co">#&gt;   subject_id subject_kind              provider                   text dim</span></span>
+<span><span class="co">#&gt; 1 HP:0004322     hpo_term embeddinggemma-hpo-v1          Short stature 256</span></span>
+<span><span class="co">#&gt; 2 HP:0001252     hpo_term embeddinggemma-hpo-v1              Hypotonia 256</span></span>
+<span><span class="co">#&gt; 3 HP:0000118     hpo_term embeddinggemma-hpo-v1 Phenotypic abnormality 256</span></span>
+<span><span class="co">#&gt;       score</span></span>
+<span><span class="co">#&gt; 1 0.9806611</span></span>
+<span><span class="co">#&gt; 2 0.6952595</span></span>
+<span><span class="co">#&gt; 3 0.6600621</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="exact-late-interaction-with-native-colbert">Exact late interaction with native ColBERT<a class="anchor" aria-label="anchor" href="#exact-late-interaction-with-native-colbert"></a>
 </h2>
-<p>ColBERT document vectors are persisted once. A query is encoded with its own native query contract; the DuckDB reranker computes the exact MaxSim sum over the stored document vectors. For a very large corpus, use dense HNSW, lexical, or graph candidates first, then restrict <code>candidate_subject_id</code> for the MaxSim pass.</p>
+<p>ColBERT document vectors are persisted once. A query is encoded with its own native query contract; the DuckDB reranker computes the exact MaxSim sum over the stored document vectors. For a very large corpus, use dense HNSW, lexical, or graph candidates first, then restrict <code>candidate_subject_id</code> for the MaxSim pass. The chunk is evaluated during every render and runs the real native model when <code>COLBERT_WEIGHTS_FILE</code> names a local GGUF.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"COLBERT_WEIGHTS_FILE"</span><span class="op">)</span>,</span>
-<span>  num_threads <span class="op">=</span> <span class="fl">8</span></span>
-<span><span class="op">)</span></span>
-<span><span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
-<span>  <span class="va">colbert_model</span>,</span>
-<span>  role <span class="op">=</span> <span class="st">"document"</span>,</span>
-<span>  label <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span></span>
-<span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="va">have_colbert</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span><span class="va">colbert_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span>  <span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
+<span>    <span class="va">colbert_model</span>,</span>
+<span>    role <span class="op">=</span> <span class="st">"document"</span>,</span>
+<span>    label <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span></span>
+<span>  <span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
-<span>  <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
-<span>  provider <span class="op">=</span> <span class="va">colbert_documents</span>,</span>
-<span>  subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
+<span>    <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
+<span>    provider <span class="op">=</span> <span class="va">colbert_documents</span>,</span>
+<span>    subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
+<span>    subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_query.html">ducksemantics_colbert_query</a></span><span class="op">(</span></span>
-<span>  <span class="va">colbert_model</span>,</span>
-<span>  <span class="st">"developmental delay with seizures"</span>,</span>
-<span>  provider <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span>,</span>
-<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
-<span>  top_k <span class="op">=</span> <span class="fl">25L</span></span>
-<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="va">hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_query.html">ducksemantics_colbert_query</a></span><span class="op">(</span></span>
+<span>    <span class="va">colbert_model</span>,</span>
+<span>    <span class="st">"developmental delay with seizures"</span>,</span>
+<span>    provider <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span>,</span>
+<span>    subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
+<span>    top_k <span class="op">=</span> <span class="fl">25L</span></span>
+<span>  <span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
+<span>  <span class="va">hits</span></span>
+<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example."</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example.</span></span></code></pre></div>
 <p>The token rows contain native 128-dimensional ColBERT document vectors, not BebeLM causal states. <code>duckdb-vss</code> can accelerate the EmbeddingGemma dense stage, but it does not implement variable-length ColBERT MaxSim.</p>
 </div>
 <div class="section level2">
 <h2 id="bebelm-candidate-judgment">BebeLM candidate judgment<a class="anchor" aria-label="anchor" href="#bebelm-candidate-judgment"></a>
 </h2>
-<p>The final local LLM stage only receives candidates and context already grounded by deterministic retrieval. Its structured response can drop negated, uncertain, historical, or wrong-subject mentions; it may only replace a concept with an explicitly supplied candidate or graph neighbor.</p>
+<p>The final local LLM stage only receives candidates and context already grounded by deterministic retrieval. Its structured response can drop negated, uncertain, historical, or wrong-subject mentions; it may only replace a concept with an explicitly supplied candidate or graph neighbor. This chunk executes a real BebeLM call when <code>BEBELM_WEIGHTS_FILE</code> names a local GGUF.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">generation_model</span> <span class="op">&lt;-</span> <span class="fu">bebel_model_load</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"BEBELM_WEIGHTS_FILE"</span><span class="op">)</span>, num_threads <span class="op">=</span> <span class="fl">8</span><span class="op">)</span></span>
-<span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">bebel_agent</span><span class="op">(</span><span class="va">generation_model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">192L</span>, max_think <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">generation_model</span> <span class="op">&lt;-</span> <span class="fu">bebel_model_load</span><span class="op">(</span><span class="va">bebel_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">bebel_agent</span><span class="op">(</span><span class="va">generation_model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">256L</span>, max_think <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">judgments</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_bebel_judge.html">ducksemantics_bebel_judge</a></span><span class="op">(</span></span>
 <span>  <span class="va">agent</span>,</span>
-<span>  text <span class="op">=</span> <span class="st">"The proband has short stature and no diabetes mellitus."</span>,</span>
+<span>  text <span class="op">=</span> <span class="va">case_text</span>,</span>
 <span>  mentions <span class="op">=</span> <span class="va">mentions</span>,</span>
 <span>  conn <span class="op">=</span> <span class="va">conn</span>,</span>
 <span>  parser <span class="op">=</span> <span class="fu"><a href="reference/ducksemantics_bebel_tool_judgment_parser.html">ducksemantics_bebel_tool_judgment_parser</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  model <span class="op">=</span> <span class="st">"LFM2.5-8B-A1B"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<span><span class="op">)</span></span>
+<span><span class="va">judgments</span></span>
+<span><span class="co">#&gt;                judgment_id      subject_id                   predicate</span></span>
+<span><span class="co">#&gt; 1 judgment:case-001:000017 case-001:000017 semantic:grounding_decision</span></span>
+<span><span class="co">#&gt; 2 judgment:case-001:000031 case-001:000031 semantic:grounding_decision</span></span>
+<span><span class="co">#&gt;    object_id</span></span>
+<span><span class="co">#&gt; 1 HP:0004322</span></span>
+<span><span class="co">#&gt; 2 HP:0001250</span></span>
+<span><span class="co">#&gt;                                                                                                                                                                                                                                                                                                        value_json</span></span>
+<span><span class="co">#&gt; 1 {"mention_id":"case-001:000017","decision":"keep","confidence":1,"patient_context":"The proband has short stature and seizures but no diabetes mellitus.","evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","replacement_node_id":null,"node_id":"HP:0004322"}</span></span>
+<span><span class="co">#&gt; 2        {"mention_id":"case-001:000031","decision":"keep","confidence":0.95,"patient_context":"The proband has short stature and seizures but no diabetes mellitus.","evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","replacement_node_id":null,"node_id":"HP:0001250"}</span></span>
+<span><span class="co">#&gt;   decision confidence</span></span>
+<span><span class="co">#&gt; 1     keep       1.00</span></span>
+<span><span class="co">#&gt; 2     keep       0.95</span></span>
+<span><span class="co">#&gt;                                                                                                                                                                                        evidence</span></span>
+<span><span class="co">#&gt; 1 {"evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
+<span><span class="co">#&gt; 2           {"evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
+<span><span class="co">#&gt;           model             recorded_at attrs</span></span>
+<span><span class="co">#&gt; 1 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  &lt;NA&gt;</span></span>
+<span><span class="co">#&gt; 2 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  &lt;NA&gt;</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
@@ -202,6 +250,7 @@
 <h2 data-toc-skip>Developers</h2>
 <ul class="list-unstyled">
 <li>Sounkou Mahamane Toure <br><small class="roles"> Author, maintainer </small>   </li>
+<li><a href="authors.html">More about authors...</a></li>
 </ul>
 </div>
 

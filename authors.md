@@ -4,6 +4,9 @@
 
 - **Sounkou Mahamane Toure**. Author, maintainer.
 
+- **Human Phenotype Ontology**. Copyright holder.  
+  Bundled README fixture (CC BY 4.0)
+
 ## Citation
 
 Source:

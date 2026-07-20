@@ -15,6 +15,7 @@ ducksemantics_bebel_judge(
   instructions = ducksemantics_default_judgment_instructions(),
   parser = ducksemantics_json_judgment_parser(),
   on_event = NULL,
+  max_retries = 1L,
   record = !is.null(conn),
   model = "Rbebelm"
 )
@@ -61,6 +62,13 @@ ducksemantics_bebel_judge(
 
   Optional Rbebelm event handler.
 
+- max_retries:
+
+  Number of corrective turns after a response fails the strict
+  `DucksemanticsJudgmentParser` contract. Each parse error is appended
+  to the same BebeLM transcript as a user turn; it is never silently
+  coerced.
+
 - record:
 
   Append judgments to the judgment table?
@@ -71,4 +79,5 @@ ducksemantics_bebel_judge(
 
 ## Value
 
-A data frame of judgment rows.
+A data frame of judgment rows. Its `responses` and `parse_errors`
+attributes retain every model response and corrective parse error.

@@ -49,6 +49,7 @@
 <span>  instructions <span class="op">=</span> <span class="fu"><a href="ducksemantics_default_judgment_instructions.html">ducksemantics_default_judgment_instructions</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  parser <span class="op">=</span> <span class="fu"><a href="ducksemantics_json_judgment_parser.html">ducksemantics_json_judgment_parser</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  on_event <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  max_retries <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  record <span class="op">=</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span>,</span>
 <span>  model <span class="op">=</span> <span class="st">"Rbebelm"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -96,6 +97,12 @@ policy.</p></dd>
 <dd><p>Optional Rbebelm event handler.</p></dd>
 
 
+<dt id="arg-max-retries">max_retries<a class="anchor" aria-label="anchor" href="#arg-max-retries"></a></dt>
+<dd><p>Number of corrective turns after a response fails the
+strict <code>DucksemanticsJudgmentParser</code> contract. Each parse error is appended
+to the same BebeLM transcript as a user turn; it is never silently coerced.</p></dd>
+
+
 <dt id="arg-record">record<a class="anchor" aria-label="anchor" href="#arg-record"></a></dt>
 <dd><p>Append judgments to the judgment table?</p></dd>
 
@@ -106,7 +113,8 @@ policy.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A data frame of judgment rows.</p>
+    <p>A data frame of judgment rows. Its <code>responses</code> and <code>parse_errors</code>
+attributes retain every model response and corrective parse error.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

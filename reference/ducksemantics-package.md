@@ -10,7 +10,7 @@ Useful links:
 
 - <https://github.com/sounkou-bioinfo/ducksemantics>
 
-- <https://sounkou-bioinfo.github.io/ducksemantics>
+- <https://sounkou-bioinfo.github.io/ducksemantics/>
 
 - Report bugs at
   <https://github.com/sounkou-bioinfo/ducksemantics/issues>
@@ -22,3 +22,8 @@ Useful links:
 Authors:
 
 - Sounkou Mahamane Toure <sounkoutoure@gmail.com>
+
+Other contributors:
+
+- Human Phenotype Ontology (Bundled README fixture (CC BY 4.0))
+  \[copyright holder\]
