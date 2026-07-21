@@ -49,17 +49,8 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="ducksemantics">ducksemantics<a class="anchor" aria-label="anchor" href="#ducksemantics"></a>
 </h1></div>
-<p><code>ducksemantics</code> is a DuckDB-native semantic graph and evidence-grounding package for R. It stores ontology nodes, aliases, graph edges, dense vectors, and native ColBERT document token vectors in one auditable DuckDB database.</p>
-<p>It uses the dedicated Rbebelm model surfaces rather than causal generator hidden states:</p>
-<ul>
-<li>
-<strong>EmbeddingGemma</strong> provides dense, task-prompted vectors for broad retrieval and optional DuckDB HNSW candidate generation.</li>
-<li>
-<strong>LFM2.5-ColBERT</strong> provides exact late-interaction MaxSim reranking of stored candidate documents.</li>
-<li>
-<strong>BebeLM</strong> provides local structured judgment of deterministic candidates, including negation, uncertainty, family history, and subject context.</li>
-</ul>
-<p>HPO, MONDO, ORPHANET, and local knowledge graphs are sources for the same graph schema, not special-purpose APIs.</p>
+<p><code>ducksemantics</code> is a DuckDB-native semantic graph and evidence-grounding package for R. It stores ontology nodes, aliases, graph edges, dense vectors, and ColBERT document token vectors in one auditable DuckDB database.</p>
+<p>It combines the Rbebelm retrieval and judgment APIs in one graph workflow. EmbeddingGemma supplies task-prompted dense vectors for broad retrieval and DuckDB HNSW candidate generation, LFM2.5-ColBERT supplies exact late-interaction MaxSim reranking of stored candidate documents, and BebeLM records structured judgments with negation, uncertainty, family history, and subject context. HPO, MONDO, ORPHANET, and local knowledge graphs load through the same graph schema.</p>
 <div class="section level2">
 <h2 id="build-a-semantic-graph">Build a semantic graph<a class="anchor" aria-label="anchor" href="#build-a-semantic-graph"></a>
 </h2>
@@ -103,7 +94,7 @@
 <div class="section level2">
 <h2 id="dense-retrieval-with-embeddinggemma">Dense retrieval with EmbeddingGemma<a class="anchor" aria-label="anchor" href="#dense-retrieval-with-embeddinggemma"></a>
 </h2>
-<p>Use a retrieval-trained dense encoder for broad candidate generation. Choose an EmbeddingGemma task deliberately: vectors are only comparable when they use a compatible prompt contract. This chunk executes a real native encoder when <code>EMBEDDING_GEMMA_WEIGHTS_FILE</code> names a local GGUF.</p>
+<p>EmbeddingGemma provides the broad candidate stage. Choose its task deliberately: vectors sharing a compatible prompt contract can be compared directly. This example loads the local GGUF selected by <code>EMBEDDING_GEMMA_WEIGHTS_FILE</code> and executes the native encoder.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">Rbebelm</span><span class="op">)</span></span>
 <span></span>
@@ -153,41 +144,39 @@
 <div class="section level2">
 <h2 id="exact-late-interaction-with-native-colbert">Exact late interaction with native ColBERT<a class="anchor" aria-label="anchor" href="#exact-late-interaction-with-native-colbert"></a>
 </h2>
-<p>ColBERT document vectors are persisted once. A query is encoded with its own native query contract; the DuckDB reranker computes the exact MaxSim sum over the stored document vectors. For a very large corpus, use dense HNSW, lexical, or graph candidates first, then restrict <code>candidate_subject_id</code> for the MaxSim pass. The chunk is evaluated during every render and runs the real native model when <code>COLBERT_WEIGHTS_FILE</code> names a local GGUF.</p>
+<p>ColBERT document vectors are persisted once, and each query is encoded with the model’s query contract. DuckDB then computes the exact MaxSim sum over stored document vectors. Large corpora can send dense HNSW, lexical, or graph candidates to this stage through <code>candidate_subject_id</code>. This example loads the local GGUF selected by <code>COLBERT_WEIGHTS_FILE</code> and uses Rbebelm’s native LFM2.5-ColBERT encoder.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="va">have_colbert</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span><span class="va">colbert_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
-<span>  <span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
-<span>    <span class="va">colbert_model</span>,</span>
-<span>    role <span class="op">=</span> <span class="st">"document"</span>,</span>
-<span>    label <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span></span>
-<span>  <span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span><span class="va">colbert_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">colbert_model</span>,</span>
+<span>  role <span class="op">=</span> <span class="st">"document"</span>,</span>
+<span>  label <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
-<span>  <span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
-<span>    <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
-<span>    provider <span class="op">=</span> <span class="va">colbert_documents</span>,</span>
-<span>    subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
-<span>    subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/ducksemantics_token_embedding_batch_from_provider.html">ducksemantics_token_embedding_batch_from_provider</a></span><span class="op">(</span></span>
+<span>  <span class="va">terms</span><span class="op">$</span><span class="va">label</span>,</span>
+<span>  provider <span class="op">=</span> <span class="va">colbert_documents</span>,</span>
+<span>  subject_id <span class="op">=</span> <span class="va">terms</span><span class="op">$</span><span class="va">node_id</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_write_token_embeddings.html">ducksemantics_write_token_embeddings</a></span><span class="op">(</span><span class="va">conn</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span></span>
-<span>  <span class="va">hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_query.html">ducksemantics_colbert_query</a></span><span class="op">(</span></span>
-<span>    <span class="va">colbert_model</span>,</span>
-<span>    <span class="st">"developmental delay with seizures"</span>,</span>
-<span>    provider <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span>,</span>
-<span>    subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
-<span>    top_k <span class="op">=</span> <span class="fl">25L</span></span>
-<span>  <span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
-<span>  <span class="va">hits</span></span>
-<span><span class="op">}</span> <span class="kw">else</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example."</span><span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span><span class="co">#&gt; Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example.</span></span></code></pre></div>
-<p>The token rows contain native 128-dimensional ColBERT document vectors, not BebeLM causal states. <code>duckdb-vss</code> can accelerate the EmbeddingGemma dense stage, but it does not implement variable-length ColBERT MaxSim.</p>
+<span><span class="va">hits</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_query.html">ducksemantics_colbert_query</a></span><span class="op">(</span></span>
+<span>  <span class="va">colbert_model</span>,</span>
+<span>  <span class="st">"developmental delay with seizures"</span>,</span>
+<span>  provider <span class="op">=</span> <span class="st">"lfm2.5-colbert-350m-q4km"</span>,</span>
+<span>  subject_kind <span class="op">=</span> <span class="st">"hpo_term"</span>,</span>
+<span>  top_k <span class="op">=</span> <span class="fl">25L</span></span>
+<span><span class="op">)</span> <span class="op">|&gt;</span> <span class="fu"><a href="reference/ducksemantics_late_interaction_search.html">ducksemantics_late_interaction_search</a></span><span class="op">(</span><span class="va">conn</span><span class="op">)</span></span>
+<span><span class="va">hits</span></span>
+<span><span class="co">#&gt; &lt;ducksemantics late-interaction result&gt;</span></span>
+<span><span class="co">#&gt;   blocks: 4</span></span>
+<span><span class="co">#&gt;   top score: 29.7243</span></span></code></pre></div>
+<p>The token table holds 128-dimensional LFM2.5-ColBERT document vectors for variable-length MaxSim scoring. <code>duckdb-vss</code> can accelerate the fixed-width EmbeddingGemma candidate stage while DuckDB evaluates the token-level reranker.</p>
 </div>
 <div class="section level2">
 <h2 id="bebelm-candidate-judgment">BebeLM candidate judgment<a class="anchor" aria-label="anchor" href="#bebelm-candidate-judgment"></a>
 </h2>
-<p>The final local LLM stage only receives candidates and context already grounded by deterministic retrieval. Its structured response can drop negated, uncertain, historical, or wrong-subject mentions; it may only replace a concept with an explicitly supplied candidate or graph neighbor. This chunk executes a real BebeLM call when <code>BEBELM_WEIGHTS_FILE</code> names a local GGUF.</p>
+<p>BebeLM reviews candidates together with the retrieved context and records a structured decision for negated, uncertain, historical, and subject-specific mentions. Replacement concepts come from the supplied candidates and graph neighbors, preserving a direct evidence trail. This example loads the local GGUF selected by <code>BEBELM_WEIGHTS_FILE</code> and executes a BebeLM judgment.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">generation_model</span> <span class="op">&lt;-</span> <span class="fu">bebel_model_load</span><span class="op">(</span><span class="va">bebel_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">bebel_agent</span><span class="op">(</span><span class="va">generation_model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">256L</span>, max_think <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span>
@@ -217,8 +206,8 @@
 <span><span class="co">#&gt; 1 {"evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
 <span><span class="co">#&gt; 2           {"evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
 <span><span class="co">#&gt;           model             recorded_at attrs</span></span>
-<span><span class="co">#&gt; 1 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  &lt;NA&gt;</span></span>
-<span><span class="co">#&gt; 2 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  &lt;NA&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  &lt;NA&gt;</span></span>
+<span><span class="co">#&gt; 2 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  &lt;NA&gt;</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
