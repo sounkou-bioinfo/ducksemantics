@@ -32,4 +32,5 @@ ducksemantics_closure_sql(
 
 ## Value
 
-A single SQL statement.
+A DuckDB SQL script that replaces the closure table and restores its
+graph indexes.

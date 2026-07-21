@@ -13,6 +13,18 @@ and BebeLM records structured judgments with negation, uncertainty,
 family history, and subject context. HPO, MONDO, ORPHANET, and local
 knowledge graphs load through the same graph schema.
 
+## Install
+
+Install the release and its R dependencies from the project R-universe:
+
+``` r
+
+install.packages(
+  "ducksemantics",
+  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org")
+)
+```
+
 ## Build a semantic graph
 
 The bundled HPO fixture is a small, attribution-preserving subset of the
@@ -56,6 +68,15 @@ mentions
 #> 1 HPO README fixture
 #> 2 HPO README fixture
 ```
+
+### Full HPO validation
+
+The 0.1.0 release was exercised against the complete HPO 2026-06-23
+ontology. The run loaded 19,836 active nodes, 50,029 aliases, and 24,378
+direct edges, then materialized 202,740 `is_a` closure rows. The
+model-scale run persisted one 256-dimensional EmbeddingGemma vector for
+every active term and 182,884 native ColBERT token vectors across the
+same 19,836 terms before running dense and exact MaxSim queries.
 
 ## Dense retrieval with EmbeddingGemma
 
@@ -194,8 +215,8 @@ judgments
 #> 1 {"evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}
 #> 2           {"evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}
 #>           model             recorded_at attrs
-#> 1 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  <NA>
-#> 2 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  <NA>
+#> 1 LFM2.5-8B-A1B 2026-07-21 15:01:45.777  <NA>
+#> 2 LFM2.5-8B-A1B 2026-07-21 15:01:45.777  <NA>
 ```
 
 # Package index

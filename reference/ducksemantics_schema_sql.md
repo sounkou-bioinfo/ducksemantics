@@ -2,8 +2,8 @@
 
 Returns the core SQL DDL for the generic semantic graph and grounding
 contract. The schema is intentionally not HPO-specific: ontology terms,
-local concept graphs, memory nodes, and graph projections can all use
-the same node, alias, edge, mention, and judgment tables.
+local concept graphs, memory nodes, and pi-bio-agent graph projections
+can all use the same node, alias, edge, mention, and judgment tables.
 
 ## Usage
 

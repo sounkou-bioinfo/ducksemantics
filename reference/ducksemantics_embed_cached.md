@@ -13,6 +13,7 @@ ducksemantics_embed_cached(
   cache_dir,
   chunk_size = 4096L,
   refresh = FALSE,
+  cache_key = NULL,
   ...
 )
 ```
@@ -40,10 +41,17 @@ ducksemantics_embed_cached(
 
   Recompute all chunks?
 
+- cache_key:
+
+  Optional stable identifier for provider weights or other state that is
+  not represented by the provider object. Changing it invalidates
+  existing chunks.
+
 - ...:
 
   Extra arguments passed to
   [`ducksemantics_embed()`](https://sounkou-bioinfo.github.io/ducksemantics/reference/ducksemantics_provider_generics.md).
+  These arguments are included in the cache identity.
 
 ## Value
 

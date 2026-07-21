@@ -11,7 +11,7 @@ retrieval-encoder work."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">ducksemantics</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -51,6 +51,7 @@ retrieval-encoder work.</p>
 <span>  <span class="va">cache_dir</span>,</span>
 <span>  chunk_size <span class="op">=</span> <span class="fl">4096L</span>,</span>
 <span>  refresh <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  cache_key <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -79,8 +80,15 @@ retrieval-encoder work.</p>
 <dd><p>Recompute all chunks?</p></dd>
 
 
+<dt id="arg-cache-key">cache_key<a class="anchor" aria-label="anchor" href="#arg-cache-key"></a></dt>
+<dd><p>Optional stable identifier for provider weights or other
+state that is not represented by the provider object. Changing it
+invalidates existing chunks.</p></dd>
+
+
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Extra arguments passed to <code><a href="ducksemantics_provider_generics.html">ducksemantics_embed()</a></code>.</p></dd>
+<dd><p>Extra arguments passed to <code><a href="ducksemantics_provider_generics.html">ducksemantics_embed()</a></code>. These arguments
+are included in the cache identity.</p></dd>
 
 </dl></div>
     <div class="section level2">

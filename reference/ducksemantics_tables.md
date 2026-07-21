@@ -1,7 +1,6 @@
 # Semantic graph table names
 
-Returns the table names used by the ducksemantics semantic graph
-contract.
+Semantic graph table names
 
 ## Usage
 

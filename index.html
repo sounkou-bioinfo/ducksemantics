@@ -22,7 +22,7 @@
 
     <a class="navbar-brand me-2" href="index.html">ducksemantics</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -52,10 +52,20 @@
 <p><code>ducksemantics</code> is a DuckDB-native semantic graph and evidence-grounding package for R. It stores ontology nodes, aliases, graph edges, dense vectors, and ColBERT document token vectors in one auditable DuckDB database.</p>
 <p>It combines the Rbebelm retrieval and judgment APIs in one graph workflow. EmbeddingGemma supplies task-prompted dense vectors for broad retrieval and DuckDB HNSW candidate generation, LFM2.5-ColBERT supplies exact late-interaction MaxSim reranking of stored candidate documents, and BebeLM records structured judgments with negation, uncertainty, family history, and subject context. HPO, MONDO, ORPHANET, and local knowledge graphs load through the same graph schema.</p>
 <div class="section level2">
+<h2 id="install">Install<a class="anchor" aria-label="anchor" href="#install"></a>
+</h2>
+<p>Install the release and its R dependencies from the project R-universe:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
+<span>  <span class="st">"ducksemantics"</span>,</span>
+<span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"https://sounkou-bioinfo.r-universe.dev"</span>, <span class="st">"https://cloud.r-project.org"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
 <h2 id="build-a-semantic-graph">Build a semantic graph<a class="anchor" aria-label="anchor" href="#build-a-semantic-graph"></a>
 </h2>
 <p>The bundled HPO fixture is a small, attribution-preserving subset of the real Human Phenotype Ontology. It keeps the README executable without downloading an ontology during rendering.</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link">ducksemantics</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">conn</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_connect.html">ducksemantics_connect</a></span><span class="op">(</span><span class="op">)</span></span>
@@ -90,12 +100,17 @@
 <span><span class="co">#&gt;               source</span></span>
 <span><span class="co">#&gt; 1 HPO README fixture</span></span>
 <span><span class="co">#&gt; 2 HPO README fixture</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="full-hpo-validation">Full HPO validation<a class="anchor" aria-label="anchor" href="#full-hpo-validation"></a>
+</h3>
+<p>The 0.1.0 release was exercised against the complete HPO 2026-06-23 ontology. The run loaded 19,836 active nodes, 50,029 aliases, and 24,378 direct edges, then materialized 202,740 <code>is_a</code> closure rows. The model-scale run persisted one 256-dimensional EmbeddingGemma vector for every active term and 182,884 native ColBERT token vectors across the same 19,836 terms before running dense and exact MaxSim queries.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="dense-retrieval-with-embeddinggemma">Dense retrieval with EmbeddingGemma<a class="anchor" aria-label="anchor" href="#dense-retrieval-with-embeddinggemma"></a>
 </h2>
 <p>EmbeddingGemma provides the broad candidate stage. Choose its task deliberately: vectors sharing a compatible prompt contract can be compared directly. This example loads the local GGUF selected by <code>EMBEDDING_GEMMA_WEIGHTS_FILE</code> and executes the native encoder.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va">Rbebelm</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">embedding_model</span> <span class="op">&lt;-</span> <span class="fu">embeddinggemma_model_load</span><span class="op">(</span></span>
@@ -145,7 +160,7 @@
 <h2 id="exact-late-interaction-with-native-colbert">Exact late interaction with native ColBERT<a class="anchor" aria-label="anchor" href="#exact-late-interaction-with-native-colbert"></a>
 </h2>
 <p>ColBERT document vectors are persisted once, and each query is encoded with the model’s query contract. DuckDB then computes the exact MaxSim sum over stored document vectors. Large corpora can send dense HNSW, lexical, or graph candidates to this stage through <code>candidate_subject_id</code>. This example loads the local GGUF selected by <code>COLBERT_WEIGHTS_FILE</code> and uses Rbebelm’s native LFM2.5-ColBERT encoder.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">colbert_model</span> <span class="op">&lt;-</span> <span class="fu">colbert_model_load</span><span class="op">(</span><span class="va">colbert_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="va">colbert_documents</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/ducksemantics_colbert_provider.html">ducksemantics_colbert_provider</a></span><span class="op">(</span></span>
 <span>  <span class="va">colbert_model</span>,</span>
@@ -177,7 +192,7 @@
 <h2 id="bebelm-candidate-judgment">BebeLM candidate judgment<a class="anchor" aria-label="anchor" href="#bebelm-candidate-judgment"></a>
 </h2>
 <p>BebeLM reviews candidates together with the retrieved context and records a structured decision for negated, uncertain, historical, and subject-specific mentions. Replacement concepts come from the supplied candidates and graph neighbors, preserving a direct evidence trail. This example loads the local GGUF selected by <code>BEBELM_WEIGHTS_FILE</code> and executes a BebeLM judgment.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">generation_model</span> <span class="op">&lt;-</span> <span class="fu">bebel_model_load</span><span class="op">(</span><span class="va">bebel_weights</span>, num_threads <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">bebel_agent</span><span class="op">(</span><span class="va">generation_model</span>, greedy <span class="op">=</span> <span class="cn">TRUE</span>, max_gen <span class="op">=</span> <span class="fl">256L</span>, max_think <span class="op">=</span> <span class="fl">0L</span><span class="op">)</span></span>
 <span></span>
@@ -206,8 +221,8 @@
 <span><span class="co">#&gt; 1 {"evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
 <span><span class="co">#&gt; 2           {"evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}</span></span>
 <span><span class="co">#&gt;           model             recorded_at attrs</span></span>
-<span><span class="co">#&gt; 1 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  &lt;NA&gt;</span></span>
-<span><span class="co">#&gt; 2 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  &lt;NA&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1 LFM2.5-8B-A1B 2026-07-21 15:01:45.777  &lt;NA&gt;</span></span>
+<span><span class="co">#&gt; 2 LFM2.5-8B-A1B 2026-07-21 15:01:45.777  &lt;NA&gt;</span></span></code></pre></div>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
