@@ -5,22 +5,16 @@
 
 `ducksemantics` is a DuckDB-native semantic graph and evidence-grounding
 package for R. It stores ontology nodes, aliases, graph edges, dense
-vectors, and native ColBERT document token vectors in one auditable
-DuckDB database.
+vectors, and ColBERT document token vectors in one auditable DuckDB
+database.
 
-It uses the dedicated Rbebelm model surfaces rather than causal
-generator hidden states:
-
-- **EmbeddingGemma** provides dense, task-prompted vectors for broad
-  retrieval and optional DuckDB HNSW candidate generation.
-- **LFM2.5-ColBERT** provides exact late-interaction MaxSim reranking of
-  stored candidate documents.
-- **BebeLM** provides local structured judgment of deterministic
-  candidates, including negation, uncertainty, family history, and
-  subject context.
-
-HPO, MONDO, ORPHANET, and local knowledge graphs are sources for the
-same graph schema, not special-purpose APIs.
+It combines the Rbebelm retrieval and judgment APIs in one graph
+workflow. EmbeddingGemma supplies task-prompted dense vectors for broad
+retrieval and DuckDB HNSW candidate generation, LFM2.5-ColBERT supplies
+exact late-interaction MaxSim reranking of stored candidate documents,
+and BebeLM records structured judgments with negation, uncertainty,
+family history, and subject context. HPO, MONDO, ORPHANET, and local
+knowledge graphs load through the same graph schema.
 
 ## Build a semantic graph
 
@@ -67,10 +61,10 @@ mentions
 
 ## Dense retrieval with EmbeddingGemma
 
-Use a retrieval-trained dense encoder for broad candidate generation.
-Choose an EmbeddingGemma task deliberately: vectors are only comparable
-when they use a compatible prompt contract. This chunk executes a real
-native encoder when `EMBEDDING_GEMMA_WEIGHTS_FILE` names a local GGUF.
+EmbeddingGemma provides the broad candidate stage. Choose its task
+deliberately: vectors sharing a compatible prompt contract can be
+compared directly. This example loads the local GGUF selected by
+`EMBEDDING_GEMMA_WEIGHTS_FILE` and executes the native encoder.
 
 ``` r
 library(Rbebelm)
@@ -121,56 +115,54 @@ dense_hits
 
 ## Exact late interaction with native ColBERT
 
-ColBERT document vectors are persisted once. A query is encoded with its
-own native query contract; the DuckDB reranker computes the exact MaxSim
-sum over the stored document vectors. For a very large corpus, use dense
-HNSW, lexical, or graph candidates first, then restrict
-`candidate_subject_id` for the MaxSim pass. The chunk is evaluated
-during every render and runs the real native model when
-`COLBERT_WEIGHTS_FILE` names a local GGUF.
+ColBERT document vectors are persisted once, and each query is encoded
+with the model’s query contract. DuckDB then computes the exact MaxSim
+sum over stored document vectors. Large corpora can send dense HNSW,
+lexical, or graph candidates to this stage through
+`candidate_subject_id`. This example loads the local GGUF selected by
+`COLBERT_WEIGHTS_FILE` and uses Rbebelm’s native LFM2.5-ColBERT encoder.
 
 ``` r
-if (have_colbert) {
-  colbert_model <- colbert_model_load(colbert_weights, num_threads = 2)
-  colbert_documents <- ducksemantics_colbert_provider(
-    colbert_model,
-    role = "document",
-    label = "lfm2.5-colbert-350m-q4km"
-  )
+colbert_model <- colbert_model_load(colbert_weights, num_threads = 2)
+colbert_documents <- ducksemantics_colbert_provider(
+  colbert_model,
+  role = "document",
+  label = "lfm2.5-colbert-350m-q4km"
+)
 
-  ducksemantics_token_embedding_batch_from_provider(
-    terms$label,
-    provider = colbert_documents,
-    subject_id = terms$node_id,
-    subject_kind = "hpo_term"
-  ) |> ducksemantics_write_token_embeddings(conn, replace = TRUE)
+ducksemantics_token_embedding_batch_from_provider(
+  terms$label,
+  provider = colbert_documents,
+  subject_id = terms$node_id,
+  subject_kind = "hpo_term"
+) |> ducksemantics_write_token_embeddings(conn, replace = TRUE)
 
-  hits <- ducksemantics_colbert_query(
-    colbert_model,
-    "developmental delay with seizures",
-    provider = "lfm2.5-colbert-350m-q4km",
-    subject_kind = "hpo_term",
-    top_k = 25L
-  ) |> ducksemantics_late_interaction_search(conn)
-  hits
-} else {
-  message("Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example.")
-}
-#> Set COLBERT_WEIGHTS_FILE to execute the native ColBERT example.
+hits <- ducksemantics_colbert_query(
+  colbert_model,
+  "developmental delay with seizures",
+  provider = "lfm2.5-colbert-350m-q4km",
+  subject_kind = "hpo_term",
+  top_k = 25L
+) |> ducksemantics_late_interaction_search(conn)
+hits
+#> <ducksemantics late-interaction result>
+#>   blocks: 4
+#>   top score: 29.7243
 ```
 
-The token rows contain native 128-dimensional ColBERT document vectors,
-not BebeLM causal states. `duckdb-vss` can accelerate the EmbeddingGemma
-dense stage, but it does not implement variable-length ColBERT MaxSim.
+The token table holds 128-dimensional LFM2.5-ColBERT document vectors
+for variable-length MaxSim scoring. `duckdb-vss` can accelerate the
+fixed-width EmbeddingGemma candidate stage while DuckDB evaluates the
+token-level reranker.
 
 ## BebeLM candidate judgment
 
-The final local LLM stage only receives candidates and context already
-grounded by deterministic retrieval. Its structured response can drop
-negated, uncertain, historical, or wrong-subject mentions; it may only
-replace a concept with an explicitly supplied candidate or graph
-neighbor. This chunk executes a real BebeLM call when
-`BEBELM_WEIGHTS_FILE` names a local GGUF.
+BebeLM reviews candidates together with the retrieved context and
+records a structured decision for negated, uncertain, historical, and
+subject-specific mentions. Replacement concepts come from the supplied
+candidates and graph neighbors, preserving a direct evidence trail. This
+example loads the local GGUF selected by `BEBELM_WEIGHTS_FILE` and
+executes a BebeLM judgment.
 
 ``` r
 generation_model <- bebel_model_load(bebel_weights, num_threads = 2)
@@ -201,6 +193,6 @@ judgments
 #> 1 {"evidence_span":"short stature","short_reason":"Mention directly states short stature in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}
 #> 2           {"evidence_span":"seizures","short_reason":"Mention directly states seizures in proband.","patient_context":"The proband has short stature and seizures but no diabetes mellitus."}
 #>           model             recorded_at attrs
-#> 1 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  <NA>
-#> 2 LFM2.5-8B-A1B 2026-07-20 23:39:36.933  <NA>
+#> 1 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  <NA>
+#> 2 LFM2.5-8B-A1B 2026-07-21 09:54:58.447  <NA>
 ```
