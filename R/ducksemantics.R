@@ -230,9 +230,11 @@ ducksemantics_connect <- function(dbdir = ":memory:", read_only = FALSE, array =
 #' @export
 ducksemantics_init <- function(conn, prefix = "semantic") {
   S7::prop(DucksemanticsDbConnection(value = conn), "value")
-  for (sql in ducksemantics_schema_sql(prefix)) {
-    DBI::dbExecute(conn, sql)
-  }
+  DBI::dbWithTransaction(conn, {
+    for (sql in ducksemantics_schema_sql(prefix)) {
+      DBI::dbExecute(conn, sql)
+    }
+  })
   invisible(conn)
 }
 
@@ -259,28 +261,30 @@ ducksemantics_write_graph <- function(conn,
                                       replace = FALSE,
                                       index = TRUE) {
   ducksemantics_init(conn, prefix)
-  S7::prop(DucksemanticsFlag(value = replace), "value")
-  S7::prop(DucksemanticsFlag(value = index), "value")
+  replace <- S7::prop(DucksemanticsFlag(value = replace), "value")
+  index <- S7::prop(DucksemanticsFlag(value = index), "value")
   tables <- ducksemantics_tables(prefix)
+  if (!is.null(nodes)) nodes <- ducksemantics_prepare_nodes(nodes)
+  if (!is.null(aliases)) aliases <- ducksemantics_prepare_aliases(aliases)
+  if (!is.null(edges)) edges <- ducksemantics_prepare_edges(edges)
 
-  if (!is.null(nodes)) {
-    nodes <- ducksemantics_prepare_nodes(nodes)
-    if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["nodes"]])))
-    ducksemantics_append_nodes(conn, tables[["nodes"]], nodes)
-  }
-  if (!is.null(aliases)) {
-    aliases <- ducksemantics_prepare_aliases(aliases)
-    if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["aliases"]])))
-    DBI::dbAppendTable(conn, tables[["aliases"]], unique(aliases))
-  }
-  if (!is.null(edges)) {
-    edges <- ducksemantics_prepare_edges(edges)
-    if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["edges"]])))
-    DBI::dbAppendTable(conn, tables[["edges"]], unique(edges))
-  }
-  if (isTRUE(index) && !is.null(aliases)) {
-    ducksemantics_index_aliases(conn, prefix = prefix)
-  }
+  DBI::dbWithTransaction(conn, {
+    if (!is.null(nodes)) {
+      if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["nodes"]])))
+      ducksemantics_append_nodes(conn, tables[["nodes"]], nodes)
+    }
+    if (!is.null(aliases)) {
+      if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["aliases"]])))
+      ducksemantics_append_unique_rows(conn, tables[["aliases"]], aliases)
+    }
+    if (!is.null(edges)) {
+      if (replace) DBI::dbExecute(conn, paste0("DELETE FROM ", ducksemantics_quote_ident(tables[["edges"]])))
+      ducksemantics_append_unique_rows(conn, tables[["edges"]], edges)
+    }
+    if (isTRUE(index) && !is.null(aliases)) {
+      ducksemantics_index_aliases(conn, prefix = prefix)
+    }
+  })
 
   invisible(tables)
 }
@@ -299,14 +303,23 @@ ducksemantics_cache_file <- function(url,
                                      refresh = FALSE) {
   S7::prop(DucksemanticsScalarText(value = url), "value")
   S7::prop(DucksemanticsScalarText(value = filename), "value")
+  if (!identical(filename, basename(filename)) || filename %in% c(".", "..")) {
+    stop("`filename` must be a file name without directory components.", call. = FALSE)
+  }
   S7::prop(DucksemanticsScalarText(value = cache_dir), "value")
   S7::prop(DucksemanticsFlag(value = refresh), "value")
   if (!dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
   }
   path <- file.path(cache_dir, filename)
-  if (isTRUE(refresh) || !file.exists(path) || file.info(path)$size == 0) {
-    utils::download.file(url, path, mode = "wb", quiet = TRUE)
+  if (isTRUE(refresh) || !file.exists(path) || is.na(file.info(path)$size) || file.info(path)$size == 0) {
+    temporary <- tempfile(paste0(filename, "-"), tmpdir = cache_dir)
+    on.exit(unlink(temporary, force = TRUE), add = TRUE)
+    utils::download.file(url, temporary, mode = "wb", quiet = TRUE)
+    if (!file.exists(temporary) || is.na(file.info(temporary)$size) || file.info(temporary)$size == 0) {
+      stop("Downloaded cache file is empty: ", url, call. = FALSE)
+    }
+    ducksemantics_atomic_replace(temporary, path)
   }
   normalizePath(path, mustWork = TRUE)
 }
@@ -329,8 +342,8 @@ ducksemantics_cache_rds <- function(path, compute, refresh = FALSE) {
   if (!dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
   }
-  if (isTRUE(refresh) || !file.exists(path) || file.info(path)$size == 0) {
-    saveRDS(compute(), path)
+  if (isTRUE(refresh) || !file.exists(path) || is.na(file.info(path)$size) || file.info(path)$size == 0) {
+    ducksemantics_atomic_save_rds(compute(), path)
   }
   readRDS(path)
 }
@@ -355,14 +368,32 @@ ducksemantics_read_obo <- function(path,
     stop("OBO file does not exist: ", path, call. = FALSE)
   }
 
-  lines <- readLines(path, warn = FALSE)
+  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
   stanzas <- ducksemantics_obo_term_stanzas(lines)
-  nodes <- vector("list", length(stanzas))
-  aliases <- list()
-  edges <- list()
-  node_n <- 0L
-  alias_n <- 0L
-  edge_n <- 0L
+  node_capacity <- length(stanzas)
+  row_capacity <- length(lines)
+  node_id <- family_out <- label_out <- description_out <- character(node_capacity)
+  alias_node_id <- alias <- alias_kind <- alias_source <- character(row_capacity)
+  alias_weight <- numeric(row_capacity)
+  edge_from_id <- edge_predicate <- edge_to_id <- character(row_capacity)
+  node_n <- alias_n <- edge_n <- 0L
+
+  add_alias <- function(id, value, kind, weight) {
+    alias_n <<- alias_n + 1L
+    alias_node_id[[alias_n]] <<- id
+    alias[[alias_n]] <<- value
+    alias_kind[[alias_n]] <<- kind
+    alias_source[[alias_n]] <<- source
+    alias_weight[[alias_n]] <<- weight
+  }
+  add_edge <- function(id, predicate, target) {
+    if (is.na(target) || !nzchar(target)) return(invisible(NULL))
+    edge_n <<- edge_n + 1L
+    edge_from_id[[edge_n]] <<- id
+    edge_predicate[[edge_n]] <<- predicate
+    edge_to_id[[edge_n]] <<- target
+    invisible(NULL)
+  }
 
   for (stanza in stanzas) {
     id <- ducksemantics_obo_first(stanza, "id")
@@ -371,76 +402,59 @@ ducksemantics_read_obo <- function(path,
     if (isTRUE(obsolete) && !isTRUE(include_obsolete)) next
 
     label <- ducksemantics_obo_first(stanza, "name")
-    description <- ducksemantics_obo_quoted(ducksemantics_obo_first_line(stanza, "def"))
     node_n <- node_n + 1L
-    nodes[[node_n]] <- data.frame(
-      node_id = id,
-      family = family,
-      label = label,
-      description = description,
-      attrs = NA_character_,
-      trust = NA_character_,
-      stringsAsFactors = FALSE
-    )
+    node_id[[node_n]] <- id
+    family_out[[node_n]] <- family
+    label_out[[node_n]] <- label
+    description_out[[node_n]] <- ducksemantics_obo_quoted(ducksemantics_obo_first_line(stanza, "def"))
 
-    if (!is.na(label) && nzchar(label)) {
-      alias_n <- alias_n + 1L
-      aliases[[alias_n]] <- data.frame(
-        node_id = id,
-        alias = label,
-        alias_kind = "label",
-        source = source,
-        weight = 1,
-        attrs = NA_character_,
-        stringsAsFactors = FALSE
-      )
+    if (!is.na(label) && nzchar(label)) add_alias(id, label, "label", 1)
+    for (alt_id in ducksemantics_obo_values(stanza, "alt_id")) {
+      if (!is.na(alt_id) && nzchar(alt_id)) add_alias(id, alt_id, "alt_id", 1)
     }
     for (syn_line in ducksemantics_obo_lines(stanza, "synonym")) {
       syn <- ducksemantics_obo_quoted(syn_line)
-      if (is.na(syn) || !nzchar(syn)) next
-      alias_n <- alias_n + 1L
-      aliases[[alias_n]] <- data.frame(
-        node_id = id,
-        alias = syn,
-        alias_kind = ducksemantics_obo_synonym_kind(syn_line),
-        source = source,
-        weight = 0.95,
-        attrs = NA_character_,
-        stringsAsFactors = FALSE
-      )
+      if (!is.na(syn) && nzchar(syn)) {
+        add_alias(id, syn, ducksemantics_obo_synonym_kind(syn_line), 0.95)
+      }
     }
     for (is_a in ducksemantics_obo_values(stanza, "is_a")) {
-      edge_n <- edge_n + 1L
-      edges[[edge_n]] <- data.frame(
-        from_id = id,
-        predicate = "is_a",
-        to_id = sub("\\s*!.*$", "", is_a, perl = TRUE),
-        attrs = NA_character_,
-        trust = NA_character_,
-        stringsAsFactors = FALSE
-      )
+      add_edge(id, "is_a", ducksemantics_obo_object_id(is_a))
     }
     for (rel in ducksemantics_obo_values(stanza, "relationship")) {
-      parts <- strsplit(sub("\\s*!.*$", "", rel, perl = TRUE), "[[:space:]]+", perl = TRUE)[[1L]]
+      parts <- strsplit(sub("[[:space:]]*!.*$", "", rel, perl = TRUE), "[[:space:]]+", perl = TRUE)[[1L]]
       parts <- parts[nzchar(parts)]
-      if (length(parts) < 2L) next
-      edge_n <- edge_n + 1L
-      edges[[edge_n]] <- data.frame(
-        from_id = id,
-        predicate = parts[[1L]],
-        to_id = parts[[2L]],
-        attrs = NA_character_,
-        trust = NA_character_,
-        stringsAsFactors = FALSE
-      )
+      if (length(parts) >= 2L) add_edge(id, parts[[1L]], ducksemantics_obo_object_id(parts[[2L]]))
     }
   }
 
-  list(
-    nodes = ducksemantics_bind_or_empty(nodes[seq_len(node_n)], ducksemantics_empty_nodes()),
-    aliases = ducksemantics_bind_or_empty(aliases, ducksemantics_empty_aliases()),
-    edges = ducksemantics_bind_or_empty(edges, ducksemantics_empty_edges())
+  nodes <- data.frame(
+    node_id = node_id[seq_len(node_n)],
+    family = family_out[seq_len(node_n)],
+    label = label_out[seq_len(node_n)],
+    description = description_out[seq_len(node_n)],
+    attrs = rep(NA_character_, node_n),
+    trust = rep(NA_character_, node_n),
+    stringsAsFactors = FALSE
   )
+  aliases <- data.frame(
+    node_id = alias_node_id[seq_len(alias_n)],
+    alias = alias[seq_len(alias_n)],
+    alias_kind = alias_kind[seq_len(alias_n)],
+    source = alias_source[seq_len(alias_n)],
+    weight = alias_weight[seq_len(alias_n)],
+    attrs = rep(NA_character_, alias_n),
+    stringsAsFactors = FALSE
+  )
+  edges <- data.frame(
+    from_id = edge_from_id[seq_len(edge_n)],
+    predicate = edge_predicate[seq_len(edge_n)],
+    to_id = edge_to_id[seq_len(edge_n)],
+    attrs = rep(NA_character_, edge_n),
+    trust = rep(NA_character_, edge_n),
+    stringsAsFactors = FALSE
+  )
+  list(nodes = nodes, aliases = aliases, edges = edges)
 }
 
 #' Write an OBO ontology into the semantic store
@@ -612,19 +626,36 @@ ducksemantics_annotate <- function(conn,
   if (!nrow(candidates)) {
     return(ducksemantics_empty_mentions())
   }
-  candidate_table <- paste0("ducksemantics_candidates_", as.integer(stats::runif(1L, 1e8, 1e9 - 1L)))
+  candidate_table <- ducksemantics_temp_table_name("ducksemantics_candidates")
   DBI::dbWriteTable(conn, candidate_table, candidates, temporary = TRUE, overwrite = TRUE)
-  on.exit(try(DBI::dbExecute(conn, paste0("DROP TABLE IF EXISTS ", ducksemantics_quote_ident(candidate_table))), silent = TRUE), add = TRUE)
+  on.exit(
+    try(
+      DBI::dbExecute(
+        conn,
+        paste0("DROP TABLE IF EXISTS ", ducksemantics_quote_ident(candidate_table))
+      ),
+      silent = TRUE
+    ),
+    add = TRUE
+  )
 
   sql <- paste0(
-    "SELECT c.document_id, c.mention_id, a.node_id, c.span, ",
+    "WITH matched AS (",
+    "SELECT c.document_id, c.mention_id AS span_id, a.node_id, c.span, ",
     "c.start_offset, c.end_offset, a.weight AS score, ",
     "'lexical_alias' AS method, CAST(NULL AS TEXT) AS attrs, CAST(NULL AS TEXT) AS trust, ",
-    "a.alias, a.alias_kind, a.source ",
+    "a.alias, a.alias_kind, a.source, ",
+    "ROW_NUMBER() OVER (PARTITION BY c.mention_id, a.node_id ",
+    "ORDER BY a.weight DESC NULLS LAST, a.alias_kind, a.alias, a.source) AS alias_rank ",
     "FROM ", ducksemantics_quote_ident(candidate_table), " c ",
     "JOIN ", ducksemantics_quote_ident(tables[["alias_index"]]), " a ",
-    "ON c.normalized_span = a.normalized_alias AND c.token_count = a.token_count ",
-    "ORDER BY c.start_offset, c.end_offset DESC, a.node_id"
+    "ON c.normalized_span = a.normalized_alias AND c.token_count = a.token_count",
+    "), deduplicated AS (SELECT * FROM matched WHERE alias_rank = 1), identified AS (",
+    "SELECT document_id, CASE WHEN COUNT(*) OVER (PARTITION BY span_id) > 1 ",
+    "THEN span_id || ':' || node_id ELSE span_id END AS mention_id, node_id, span, ",
+    "start_offset, end_offset, score, method, attrs, trust, alias, alias_kind, source ",
+    "FROM deduplicated) SELECT * FROM identified ",
+    "ORDER BY start_offset, end_offset DESC, node_id"
   )
   out <- DBI::dbGetQuery(conn, sql)
   if (isTRUE(longest_match) && nrow(out)) {
@@ -654,8 +685,10 @@ ducksemantics_default_judgment_instructions <- function() {
     "You adjudicate deterministic semantic grounding candidates.",
     "Return exactly one valid top-level JSON array and nothing before or after it. Its first character must be [ and its final character must be ].",
     "Return exactly one result for every CANDIDATES_JSON row, in the same order.",
-    "Every result must copy its candidate mention_id exactly and include mention_id, decision, confidence, patient_context, evidence_span, short_reason, and optional replacement_node_id.",
-    "For example, a candidate with mention_id m1 requires an array beginning [{\"mention_id\":\"m1\",...}]. Do not wrap results in candidates_json or any other named object.",
+    "Every result must copy its candidate mention_id exactly.",
+    "Include mention_id, decision, confidence, patient_context, evidence_span, short_reason, and optional replacement_node_id.",
+    "For example, a candidate with mention_id m1 requires an array beginning [{\"mention_id\":\"m1\",...}].",
+    "Do not wrap results in candidates_json or any other named object.",
     "decision must be one of keep, drop, replace, enrich.",
     "Use drop for negated, uncertain, family-history-only, not-about-the-subject, duplicate, or unsupported mentions.",
     "Never invent identifiers; replacements must come from supplied candidates or graph context.",
@@ -762,7 +795,12 @@ ducksemantics_judge <- function(text,
   )
   response <- ducksemantics_run(runner, prompt)
   parsed <- ducksemantics_parse(parser, response)
-  judgments <- ducksemantics_judgments_from_model(parsed, mentions, model = model)
+  judgments <- ducksemantics_judgments_from_model(
+    parsed,
+    mentions,
+    model = model,
+    allowed_node_id = ducksemantics_judgment_node_ids(mentions, graph_context)
+  )
   attr(judgments, "prompt") <- prompt
   attr(judgments, "response") <- response
   if (isTRUE(record)) {
@@ -812,8 +850,8 @@ ducksemantics_bebel_judge <- function(agent,
   s7contract::assert_implements(parser, DucksemanticsJudgmentParser, arg = "parser")
   S7::prop(DucksemanticsFlag(value = record), "value")
   S7::prop(DucksemanticsScalarText(value = model), "value")
-  if (length(max_retries) != 1L || is.na(max_retries) || max_retries < 0L ||
-    max_retries != as.integer(max_retries)) {
+  if (!is.numeric(max_retries) || length(max_retries) != 1L || is.na(max_retries) ||
+        !is.finite(max_retries) || max_retries < 0L || max_retries != floor(max_retries)) {
     stop("`max_retries` must be a non-negative integer scalar.", call. = FALSE)
   }
 
@@ -833,7 +871,12 @@ ducksemantics_bebel_judge <- function(agent,
     responses <- c(responses, response)
     result <- tryCatch({
       parsed <- ducksemantics_parse(parser, response)
-      ducksemantics_judgments_from_model(parsed, mentions, model = model)
+      ducksemantics_judgments_from_model(
+        parsed,
+        mentions,
+        model = model,
+        allowed_node_id = ducksemantics_judgment_node_ids(mentions, graph_context)
+      )
     }, error = function(error) error)
     if (!inherits(result, "error")) {
       attr(result, "prompt") <- initial_prompt
@@ -906,21 +949,21 @@ ducksemantics_write_embeddings <- function(batch,
   subject_kind <- S7::prop(batch, "subject_kind")
   provider <- S7::prop(batch, "provider")
   tables <- ducksemantics_tables(prefix)
-  if (isTRUE(replace) && nrow(rows)) {
-    delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
-    DBI::dbExecute(
-      conn,
-      paste0(
-        "DELETE FROM ", ducksemantics_quote_ident(tables[["embeddings"]]),
-        " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
-        " AND provider = ", ducksemantics_quote_string(provider),
-        " AND subject_id IN (", delete_ids, ")"
+  DBI::dbWithTransaction(conn, {
+    if (isTRUE(replace) && nrow(rows)) {
+      delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
+      DBI::dbExecute(
+        conn,
+        paste0(
+          "DELETE FROM ", ducksemantics_quote_ident(tables[["embeddings"]]),
+          " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
+          " AND provider = ", ducksemantics_quote_string(provider),
+          " AND subject_id IN (", delete_ids, ")"
+        )
       )
-    )
-  }
-  if (nrow(rows)) {
-    DBI::dbAppendTable(conn, tables[["embeddings"]], rows)
-  }
+    }
+    if (nrow(rows)) DBI::dbAppendTable(conn, tables[["embeddings"]], rows)
+  })
   invisible(rows)
 }
 
@@ -953,21 +996,21 @@ ducksemantics_write_token_embeddings <- function(batch,
   subject_kind <- S7::prop(batch, "subject_kind")
   provider <- S7::prop(batch, "provider")
   tables <- ducksemantics_tables(prefix)
-  if (isTRUE(replace) && nrow(rows)) {
-    delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
-    DBI::dbExecute(
-      conn,
-      paste0(
-        "DELETE FROM ", ducksemantics_quote_ident(tables[["token_embeddings"]]),
-        " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
-        " AND provider = ", ducksemantics_quote_string(provider),
-        " AND subject_id IN (", delete_ids, ")"
+  DBI::dbWithTransaction(conn, {
+    if (isTRUE(replace) && nrow(rows)) {
+      delete_ids <- paste(ducksemantics_quote_string(unique(rows$subject_id)), collapse = ", ")
+      DBI::dbExecute(
+        conn,
+        paste0(
+          "DELETE FROM ", ducksemantics_quote_ident(tables[["token_embeddings"]]),
+          " WHERE subject_kind = ", ducksemantics_quote_string(subject_kind),
+          " AND provider = ", ducksemantics_quote_string(provider),
+          " AND subject_id IN (", delete_ids, ")"
+        )
       )
-    )
-  }
-  if (nrow(rows)) {
-    DBI::dbAppendTable(conn, tables[["token_embeddings"]], rows)
-  }
+    }
+    if (nrow(rows)) DBI::dbAppendTable(conn, tables[["token_embeddings"]], rows)
+  })
   invisible(rows)
 }
 
@@ -1025,7 +1068,7 @@ ducksemantics_late_interaction_search <- function(query,
       "SELECT block_id, subject_id, subject_kind, provider, token_index, token, dim, embedding ",
       "FROM ", ducksemantics_quote_ident(table),
       " WHERE ", paste(filters, collapse = " AND "),
-      " ORDER BY block_id, token_index"
+      " ORDER BY provider, subject_kind, subject_id, block_id, token_index"
     )
   )
   empty <- data.frame(
@@ -1050,7 +1093,14 @@ ducksemantics_late_interaction_search <- function(query,
   stored_embeddings <- ducksemantics_l2_normalize_rows(
     ducksemantics_embedding_column_matrix(rows$embedding, dim)
   )
-  groups <- split(seq_len(nrow(rows)), rows$block_id)
+  group_start <- c(
+    TRUE,
+    rows$provider[-1L] != rows$provider[-nrow(rows)] |
+      rows$subject_kind[-1L] != rows$subject_kind[-nrow(rows)] |
+      rows$subject_id[-1L] != rows$subject_id[-nrow(rows)] |
+      rows$block_id[-1L] != rows$block_id[-nrow(rows)]
+  )
+  groups <- split(seq_len(nrow(rows)), cumsum(group_start))
   scored <- lapply(groups, function(idx) {
     candidate <- stored_embeddings[idx, , drop = FALSE]
     sims <- query_embeddings %*% t(candidate)
@@ -1261,24 +1311,26 @@ ducksemantics_cluster_embeddings <- function(spec,
   run_id <- S7::prop(spec, "run_id")
   assignments <- ducksemantics_cluster_assignment_rows(rows, x, fit, run_id)
   centroids <- ducksemantics_cluster_centroid_rows(rows, fit, run_id, dimensions)
-  if (isTRUE(replace)) {
-    DBI::dbExecute(
-      conn,
-      paste0(
-        "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_clusters"]]),
-        " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+  DBI::dbWithTransaction(conn, {
+    if (isTRUE(replace)) {
+      DBI::dbExecute(
+        conn,
+        paste0(
+          "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_clusters"]]),
+          " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+        )
       )
-    )
-    DBI::dbExecute(
-      conn,
-      paste0(
-        "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_centroids"]]),
-        " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+      DBI::dbExecute(
+        conn,
+        paste0(
+          "DELETE FROM ", ducksemantics_quote_ident(tables[["embedding_centroids"]]),
+          " WHERE cluster_run_id = ", ducksemantics_quote_string(run_id)
+        )
       )
-    )
-  }
-  DBI::dbAppendTable(conn, tables[["embedding_clusters"]], assignments)
-  DBI::dbAppendTable(conn, tables[["embedding_centroids"]], centroids)
+    }
+    DBI::dbAppendTable(conn, tables[["embedding_clusters"]], assignments)
+    DBI::dbAppendTable(conn, tables[["embedding_centroids"]], centroids)
+  })
 
   summary <- data.frame(
     cluster_run_id = run_id,
@@ -1452,8 +1504,23 @@ ducksemantics_benchmark_cases <- function(cases,
                                           source = NULL,
                                           version = NULL,
                                           metadata = list()) {
-  cases <- S7::prop(DucksemanticsTable(value = cases, required = c("case_id", "text"), allow_empty = TRUE), "value")
-  gold <- S7::prop(DucksemanticsTable(value = gold, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
+  cases <- S7::prop(
+    DucksemanticsTable(value = cases, required = c("case_id", "text"), allow_empty = FALSE),
+    "value"
+  )
+  gold <- S7::prop(
+    DucksemanticsTable(value = gold, required = c("case_id", "node_id"), allow_empty = TRUE),
+    "value"
+  )
+  ducksemantics_validate_required_text(cases, c("case_id", "text"), "cases")
+  ducksemantics_validate_required_text(gold, c("case_id", "node_id"), "gold")
+  if (anyDuplicated(cases$case_id)) {
+    stop("`cases$case_id` must uniquely identify each benchmark case.", call. = FALSE)
+  }
+  unknown_cases <- setdiff(unique(gold$case_id), cases$case_id)
+  if (length(unknown_cases)) {
+    stop("Every `gold$case_id` must occur in `cases$case_id`.", call. = FALSE)
+  }
   S7::prop(DucksemanticsScalarText(value = suite), "value")
   S7::prop(DucksemanticsScalarText(value = task), "value")
   if (!is.null(source)) S7::prop(DucksemanticsScalarText(value = source), "value")
@@ -1632,8 +1699,28 @@ ducksemantics_benchmark_metrics <- function(predictions, gold, by = c("node", "s
   }
   predictions <- S7::prop(DucksemanticsTable(value = predictions, required = c("case_id", "node_id"), allow_empty = TRUE), "value")
 
-  pred_keys <- ducksemantics_metric_keys(predictions, by = by)
-  gold_keys <- ducksemantics_metric_keys(gold, by = by)
+  key_by <- by
+  if (identical(by, "span")) {
+    complete_offsets <- function(x) {
+      all(c("start_offset", "end_offset") %in% names(x)) &&
+        all(!is.na(x$start_offset) & !is.na(x$end_offset))
+    }
+    complete_spans <- function(x) {
+      "span" %in% names(x) && all(!is.na(x$span) & nzchar(as.character(x$span)))
+    }
+    if (complete_offsets(predictions) && complete_offsets(gold)) {
+      key_by <- "offset"
+    } else if (complete_spans(predictions) && complete_spans(gold)) {
+      key_by <- "span_text"
+    } else {
+      stop(
+        "Span metrics require complete offsets in both tables or complete span text in both tables.",
+        call. = FALSE
+      )
+    }
+  }
+  pred_keys <- ducksemantics_metric_keys(predictions, by = key_by)
+  gold_keys <- ducksemantics_metric_keys(gold, by = key_by)
   tp <- sum(pred_keys %in% gold_keys)
   fp <- sum(!pred_keys %in% gold_keys)
   fn <- sum(!gold_keys %in% pred_keys)
@@ -1666,7 +1753,8 @@ ducksemantics_benchmark_metrics <- function(predictions, gold, by = c("node", "s
 #' @param from,predicate,to Source column names.
 #' @param target_table Target table name.
 #' @param attrs,trust Optional source columns containing JSON text.
-#' @return A single `CREATE OR REPLACE TABLE ... AS SELECT ...` SQL statement.
+#' @return A DuckDB SQL script that replaces the target table and restores its
+#'   graph indexes.
 #' @export
 ducksemantics_projection_sql <- function(source_table,
                                          from,
@@ -1683,15 +1771,22 @@ ducksemantics_projection_sql <- function(source_table,
   attrs_sql <- ducksemantics_optional_column(attrs, "attrs")
   trust_sql <- ducksemantics_optional_column(trust, "trust")
 
+  target_sql <- ducksemantics_quote_ident(target_table)
+  subject_index <- ducksemantics_derived_index_name(target_table, "subj_idx")
+  object_index <- ducksemantics_derived_index_name(target_table, "obj_idx")
   paste0(
-    "CREATE OR REPLACE TABLE ", ducksemantics_quote_ident(target_table),
+    "CREATE OR REPLACE TABLE ", target_sql,
     " AS SELECT ",
     ducksemantics_quote_ident(from), " AS from_id, ",
     ducksemantics_quote_ident(predicate), " AS predicate, ",
     ducksemantics_quote_ident(to), " AS to_id, ",
     attrs_sql, " AS attrs, ",
     trust_sql, " AS trust",
-    " FROM ", ducksemantics_quote_ident(source_table)
+    " FROM ", ducksemantics_quote_ident(source_table), "; ",
+    "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(subject_index),
+    " ON ", target_sql, " (from_id, predicate); ",
+    "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(object_index),
+    " ON ", target_sql, " (to_id, predicate)"
   )
 }
 
@@ -1705,7 +1800,8 @@ ducksemantics_projection_sql <- function(source_table,
 #' @param transitive_predicates Character vector of predicates to close.
 #' @param source_table Source edge table.
 #' @param target_table Target closure table.
-#' @return A single SQL statement.
+#' @return A DuckDB SQL script that replaces the closure table and restores its
+#'   graph indexes.
 #' @export
 ducksemantics_closure_sql <- function(transitive_predicates,
                                       source_table = "semantic_edges",
@@ -1715,25 +1811,44 @@ ducksemantics_closure_sql <- function(transitive_predicates,
   if (!is.character(transitive_predicates) || anyNA(transitive_predicates) || any(!nzchar(transitive_predicates))) {
     stop("`transitive_predicates` must be a character vector of non-empty strings.", call. = FALSE)
   }
-  if (!length(transitive_predicates)) {
-    return(paste0(
-      "CREATE OR REPLACE TABLE ", ducksemantics_quote_ident(target_table),
+  target_sql <- ducksemantics_quote_ident(target_table)
+  subject_index <- ducksemantics_derived_index_name(target_table, "subj_idx")
+  object_index <- ducksemantics_derived_index_name(target_table, "obj_idx")
+  create <- if (!length(transitive_predicates)) {
+    paste0(
+      "CREATE OR REPLACE TABLE ", target_sql,
       " (from_id TEXT, predicate TEXT, to_id TEXT)"
-    ))
+    )
+  } else {
+    predicates <- paste(
+      vapply(transitive_predicates, ducksemantics_quote_string, character(1)),
+      collapse = ", "
+    )
+    paste0(
+      "CREATE OR REPLACE TABLE ", target_sql, " AS ",
+      "WITH RECURSIVE closure(from_id, predicate, to_id) AS (",
+      "SELECT from_id, predicate, to_id FROM ", ducksemantics_quote_ident(source_table),
+      " WHERE predicate IN (", predicates, ") ",
+      "UNION ",
+      "SELECT c.from_id, c.predicate, e.to_id ",
+      "FROM closure c JOIN ", ducksemantics_quote_ident(source_table),
+      " e ON e.from_id = c.to_id AND e.predicate = c.predicate",
+      ") SELECT DISTINCT from_id, predicate, to_id FROM closure"
+    )
   }
-
-  predicates <- paste(vapply(transitive_predicates, ducksemantics_quote_string, character(1)), collapse = ", ")
   paste0(
-    "CREATE OR REPLACE TABLE ", ducksemantics_quote_ident(target_table), " AS ",
-    "WITH RECURSIVE closure(from_id, predicate, to_id) AS (",
-    "SELECT from_id, predicate, to_id FROM ", ducksemantics_quote_ident(source_table),
-    " WHERE predicate IN (", predicates, ") ",
-    "UNION ",
-    "SELECT c.from_id, c.predicate, e.to_id ",
-    "FROM closure c JOIN ", ducksemantics_quote_ident(source_table),
-    " e ON e.from_id = c.to_id AND e.predicate = c.predicate",
-    ") SELECT DISTINCT from_id, predicate, to_id FROM closure"
+    create, "; ",
+    "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(subject_index),
+    " ON ", target_sql, " (from_id, predicate); ",
+    "CREATE INDEX IF NOT EXISTS ", ducksemantics_quote_ident(object_index),
+    " ON ", target_sql, " (to_id, predicate)"
   )
+}
+
+ducksemantics_derived_index_name <- function(table, suffix) {
+  parts <- strsplit(table, ".", fixed = TRUE)[[1L]]
+  parts[[length(parts)]] <- paste0(parts[[length(parts)]], "_", suffix)
+  paste(parts, collapse = ".")
 }
 
 ducksemantics_optional_column <- function(column, arg) {
@@ -1755,21 +1870,82 @@ ducksemantics_quote_string <- function(x) {
   paste0("'", gsub("'", "''", x, fixed = TRUE), "'")
 }
 
+ducksemantics_temp_table_name <- function(prefix) {
+  name <- basename(tempfile(paste0(prefix, "_")))
+  gsub("[^A-Za-z0-9_]", "_", name)
+}
+
+ducksemantics_validate_required_text <- function(x, columns, arg) {
+  for (column in columns) {
+    value <- x[[column]]
+    if (!is.character(value) || anyNA(value) || any(!nzchar(value))) {
+      stop("`", arg, "$", column, "` must contain non-empty strings without NA.", call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+ducksemantics_validate_optional_text <- function(x, columns, arg) {
+  for (column in columns) {
+    value <- x[[column]]
+    if (!is.character(value) || any(!is.na(value) & !nzchar(value))) {
+      stop("`", arg, "$", column, "` must contain non-empty strings or NA.", call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+ducksemantics_atomic_replace <- function(source, target) {
+  backup <- NULL
+  if (file.exists(target)) {
+    backup <- tempfile(paste0(basename(target), "-backup-"), tmpdir = dirname(target))
+    if (!file.rename(target, backup)) {
+      stop("Could not stage existing cache file for replacement: ", target, call. = FALSE)
+    }
+  }
+  installed <- file.rename(source, target)
+  if (!installed && !is.null(backup)) file.rename(backup, target)
+  if (!installed) stop("Could not install cache file: ", target, call. = FALSE)
+  if (!is.null(backup)) unlink(backup, force = TRUE)
+  invisible(target)
+}
+
+ducksemantics_atomic_save_rds <- function(value, path) {
+  temporary <- tempfile(paste0(basename(path), "-"), tmpdir = dirname(path))
+  on.exit(unlink(temporary, force = TRUE), add = TRUE)
+  saveRDS(value, temporary)
+  ducksemantics_atomic_replace(temporary, path)
+}
+
 ducksemantics_prepare_nodes <- function(nodes) {
-  nodes <- S7::prop(DucksemanticsTable(value = nodes, required = c("node_id", "family"), allow_empty = TRUE), "value")
-  ducksemantics_add_missing(nodes, c(
+  nodes <- S7::prop(
+    DucksemanticsTable(value = nodes, required = c("node_id", "family"), allow_empty = TRUE),
+    "value"
+  )
+  nodes <- ducksemantics_add_missing(nodes, c(
     label = NA_character_,
     description = NA_character_,
     attrs = NA_character_,
     trust = NA_character_
   ))[, c("node_id", "family", "label", "description", "attrs", "trust")]
+  ducksemantics_validate_required_text(nodes, c("node_id", "family"), "nodes")
+  ducksemantics_validate_optional_text(
+    nodes,
+    c("label", "description", "attrs", "trust"),
+    "nodes"
+  )
+  nodes <- unique(nodes)
+  if (anyDuplicated(nodes$node_id)) {
+    stop("`nodes$node_id` must uniquely identify one node row.", call. = FALSE)
+  }
+  nodes
 }
 
 ducksemantics_append_nodes <- function(conn, table, nodes) {
   if (!nrow(nodes)) {
     return(invisible(0L))
   }
-  temp_table <- paste0("ducksemantics_incoming_nodes_", Sys.getpid(), "_", sample.int(1e9, 1L))
+  temp_table <- ducksemantics_temp_table_name("ducksemantics_incoming_nodes")
   quoted_temp <- ducksemantics_quote_ident(temp_table)
   on.exit(
     try(DBI::dbExecute(conn, paste0("DROP TABLE IF EXISTS ", quoted_temp)), silent = TRUE),
@@ -1794,24 +1970,67 @@ ducksemantics_append_nodes <- function(conn, table, nodes) {
   )
 }
 
+ducksemantics_append_unique_rows <- function(conn, table, rows) {
+  if (!nrow(rows)) return(invisible(0L))
+  temp_table <- ducksemantics_temp_table_name("ducksemantics_incoming_rows")
+  quoted_temp <- ducksemantics_quote_ident(temp_table)
+  quoted_table <- ducksemantics_quote_ident(table)
+  columns <- names(rows)
+  quoted_columns <- vapply(columns, ducksemantics_quote_ident, character(1))
+  on.exit(
+    try(DBI::dbExecute(conn, paste0("DROP TABLE IF EXISTS ", quoted_temp)), silent = TRUE),
+    add = TRUE
+  )
+  DBI::dbWriteTable(conn, temp_table, rows, temporary = TRUE)
+  comparisons <- paste0(
+    "existing.", quoted_columns,
+    " IS NOT DISTINCT FROM incoming.", quoted_columns
+  )
+  DBI::dbExecute(
+    conn,
+    paste0(
+      "INSERT INTO ", quoted_table, " (", paste(quoted_columns, collapse = ", "), ") ",
+      "SELECT ", paste(paste0("incoming.", quoted_columns), collapse = ", "),
+      " FROM ", quoted_temp, " incoming WHERE NOT EXISTS (SELECT 1 FROM ", quoted_table,
+      " existing WHERE ", paste(comparisons, collapse = " AND "), ")"
+    )
+  )
+}
+
 ducksemantics_prepare_aliases <- function(aliases) {
-  aliases <- S7::prop(DucksemanticsTable(value = aliases, required = c("node_id", "alias"), allow_empty = TRUE), "value")
+  aliases <- S7::prop(
+    DucksemanticsTable(value = aliases, required = c("node_id", "alias"), allow_empty = TRUE),
+    "value"
+  )
   aliases <- ducksemantics_add_missing(aliases, c(
     alias_kind = "label",
     source = NA_character_,
     weight = 1,
     attrs = NA_character_
   ))
-  aliases$weight <- as.numeric(aliases$weight)
-  aliases[, c("node_id", "alias", "alias_kind", "source", "weight", "attrs")]
+  ducksemantics_validate_required_text(aliases, c("node_id", "alias", "alias_kind"), "aliases")
+  ducksemantics_validate_optional_text(aliases, c("source", "attrs"), "aliases")
+  raw_weight <- aliases$weight
+  aliases$weight <- suppressWarnings(as.numeric(raw_weight))
+  if (any(!is.na(raw_weight) & is.na(aliases$weight)) ||
+        any(!is.na(aliases$weight) & !is.finite(aliases$weight))) {
+    stop("`aliases$weight` must contain finite numbers or NA.", call. = FALSE)
+  }
+  unique(aliases[, c("node_id", "alias", "alias_kind", "source", "weight", "attrs")])
 }
 
 ducksemantics_prepare_edges <- function(edges) {
-  edges <- S7::prop(DucksemanticsTable(value = edges, required = c("from_id", "predicate", "to_id"), allow_empty = TRUE), "value")
-  ducksemantics_add_missing(edges, c(
+  edges <- S7::prop(
+    DucksemanticsTable(value = edges, required = c("from_id", "predicate", "to_id"), allow_empty = TRUE),
+    "value"
+  )
+  edges <- ducksemantics_add_missing(edges, c(
     attrs = NA_character_,
     trust = NA_character_
   ))[, c("from_id", "predicate", "to_id", "attrs", "trust")]
+  ducksemantics_validate_required_text(edges, c("from_id", "predicate", "to_id"), "edges")
+  ducksemantics_validate_optional_text(edges, c("attrs", "trust"), "edges")
+  unique(edges)
 }
 
 ducksemantics_prepare_judgments <- function(judgments) {
@@ -1948,9 +2167,10 @@ ducksemantics_l2_normalize_rows <- function(x) {
   x <- as.matrix(x)
   storage.mode(x) <- "double"
   norms <- sqrt(rowSums(x * x))
-  good <- is.finite(norms) & norms > 0
-  x[good, ] <- x[good, , drop = FALSE] / norms[good]
-  x
+  if (any(!is.finite(norms) | norms <= 0)) {
+    stop("Late-interaction embedding rows must have a finite non-zero norm.", call. = FALSE)
+  }
+  x / norms
 }
 
 ducksemantics_cluster_assignment_rows <- function(rows, x, fit, run_id) {
@@ -2063,6 +2283,23 @@ ducksemantics_empty_mentions_with_case <- function() {
   out
 }
 
+ducksemantics_empty_judgments <- function() {
+  data.frame(
+    judgment_id = character(),
+    subject_id = character(),
+    predicate = character(),
+    object_id = character(),
+    value_json = character(),
+    decision = character(),
+    confidence = numeric(),
+    evidence = character(),
+    model = character(),
+    recorded_at = character(),
+    attrs = character(),
+    stringsAsFactors = FALSE
+  )
+}
+
 ducksemantics_bind_or_empty <- function(rows, empty) {
   rows <- rows[lengths(rows) > 0L]
   if (!length(rows)) {
@@ -2126,7 +2363,33 @@ ducksemantics_obo_quoted <- function(line) {
   if (is.na(line) || !grepl('"', line, fixed = TRUE)) {
     return(NA_character_)
   }
-  sub('^[^"]*"(([^"\\\\]|\\\\.)*)".*$', "\\1", line, perl = TRUE)
+  value <- sub('^[^"]*"(([^"\\\\]|\\\\.)*)".*$', "\\1", line, perl = TRUE)
+  ducksemantics_obo_unescape(value)
+}
+
+ducksemantics_obo_unescape <- function(value) {
+  chars <- strsplit(value, "", fixed = TRUE)[[1L]]
+  if (!length(chars) || !any(chars == "\\")) return(value)
+  out <- character()
+  i <- 1L
+  while (i <= length(chars)) {
+    if (chars[[i]] != "\\" || i == length(chars)) {
+      out <- c(out, chars[[i]])
+      i <- i + 1L
+      next
+    }
+    escaped <- chars[[i + 1L]]
+    out <- c(out, switch(escaped, n = "\n", t = "\t", W = " ", escaped))
+    i <- i + 2L
+  }
+  paste0(out, collapse = "")
+}
+
+ducksemantics_obo_object_id <- function(value) {
+  value <- sub("[[:space:]]*!.*$", "", value, perl = TRUE)
+  value <- sub("[[:space:]]*\\{.*$", "", value, perl = TRUE)
+  fields <- strsplit(trimws(value), "[[:space:]]+", perl = TRUE)[[1L]]
+  if (!length(fields)) NA_character_ else fields[[1L]]
 }
 
 ducksemantics_obo_synonym_kind <- function(line) {
@@ -2235,7 +2498,8 @@ ducksemantics_bebel_parse_repair_prompt <- function(parse_error) {
     "The source text and CANDIDATES_JSON are in the immediately preceding user turn.",
     "Return a corrected response only: its first character must be [ and its final character must be ].",
     "Do not use candidates_json, CANDIDATES_JSON, judgments, results, or any other top-level wrapper key.",
-    "The array must have exactly one object per candidate, in candidate order; every object must copy that candidate's mention_id exactly and include decision.",
+    "The array must have exactly one object per candidate, in candidate order.",
+    "Every object must copy that candidate's mention_id exactly and include decision.",
     sep = "\n"
   )
 }
@@ -2263,6 +2527,9 @@ ducksemantics_parse_json_response <- function(response) {
 
 ducksemantics_normalize_judgment_payload <- function(parsed) {
   wrapper_names <- c("array", "judgments", "results", "items", "arguments", "args")
+  if (is.list(parsed) && !length(parsed)) {
+    return(data.frame(mention_id = character(), decision = character()))
+  }
   if (is.data.frame(parsed)) {
     prefixes <- paste0(wrapper_names, ".")
     for (prefix in prefixes) {
@@ -2307,14 +2574,51 @@ ducksemantics_extract_json <- function(response) {
   stop("BebeLM response did not contain valid JSON.", call. = FALSE)
 }
 
-ducksemantics_judgments_from_model <- function(parsed, mentions, model = "Rbebelm") {
+ducksemantics_judgments_from_model <- function(parsed,
+                                               mentions,
+                                               model = "Rbebelm",
+                                               allowed_node_id = NULL) {
   ducksemantics_require_jsonlite()
-  if (is.list(parsed) && !is.data.frame(parsed)) {
-    parsed <- as.data.frame(parsed, stringsAsFactors = FALSE)
+  mentions <- S7::prop(
+    DucksemanticsTable(
+      value = mentions,
+      required = c("mention_id", "node_id"),
+      allow_empty = TRUE
+    ),
+    "value"
+  )
+  ducksemantics_validate_required_text(mentions, c("mention_id", "node_id"), "mentions")
+  expected_ids <- as.character(mentions$mention_id)
+  if (anyDuplicated(expected_ids)) {
+    stop("`mentions$mention_id` must uniquely identify each candidate.", call. = FALSE)
   }
-  parsed <- S7::prop(DucksemanticsTable(value = parsed, required = c("mention_id", "decision"), allow_empty = TRUE), "value")
+  if (is.list(parsed) && !is.data.frame(parsed)) {
+    parsed <- ducksemantics_lists_to_data_frame(parsed)
+  }
+  parsed <- S7::prop(
+    DucksemanticsTable(
+      value = parsed,
+      required = c("mention_id", "decision"),
+      allow_empty = TRUE
+    ),
+    "value"
+  )
+  if (!nrow(parsed) && !length(expected_ids)) return(ducksemantics_empty_judgments())
+  ducksemantics_validate_required_text(parsed, c("mention_id", "decision"), "parsed")
+  parsed$mention_id <- as.character(parsed$mention_id)
+  parsed$decision <- as.character(parsed$decision)
+  if (anyDuplicated(parsed$mention_id)) {
+    stop("Model returned duplicate mention_id values.", call. = FALSE)
+  }
+  if (!identical(parsed$mention_id, expected_ids)) {
+    stop(
+      "Model response must contain exactly one result per candidate in candidate order.",
+      call. = FALSE
+    )
+  }
+
   allowed_decisions <- c("keep", "drop", "replace", "enrich")
-  bad_decisions <- setdiff(unique(as.character(parsed$decision)), allowed_decisions)
+  bad_decisions <- setdiff(unique(parsed$decision), allowed_decisions)
   if (length(bad_decisions)) {
     stop(
       "Model returned unsupported decision value(s): ",
@@ -2322,16 +2626,41 @@ ducksemantics_judgments_from_model <- function(parsed, mentions, model = "Rbebel
       call. = FALSE
     )
   }
-  mention_map <- mentions[, intersect(c("mention_id", "node_id"), names(mentions)), drop = FALSE]
-  parsed <- merge(parsed, mention_map, by = "mention_id", all.x = TRUE, sort = FALSE)
-  confidence <- if ("confidence" %in% names(parsed)) as.numeric(parsed$confidence) else NA_real_
-  object_id <- if ("replacement_node_id" %in% names(parsed)) {
-    ifelse(!is.na(parsed$replacement_node_id) & nzchar(parsed$replacement_node_id), parsed$replacement_node_id, parsed$node_id)
-  } else {
-    parsed$node_id
+  raw_confidence <- if ("confidence" %in% names(parsed)) parsed$confidence else rep(NA, nrow(parsed))
+  confidence <- suppressWarnings(as.numeric(raw_confidence))
+  conversion_failed <- !is.na(raw_confidence) & is.na(confidence)
+  if (length(confidence) != nrow(parsed) || any(conversion_failed) ||
+        any(!is.na(confidence) & (!is.finite(confidence) | confidence < 0 | confidence > 1))) {
+    stop("Model confidence values must be finite numbers from 0 to 1 or null.", call. = FALSE)
   }
-  keep_object <- parsed$decision %in% c("keep", "replace", "enrich")
-  object_id[!keep_object] <- NA_character_
+
+  replacement <- if ("replacement_node_id" %in% names(parsed)) {
+    as.character(parsed$replacement_node_id)
+  } else {
+    rep(NA_character_, nrow(parsed))
+  }
+  has_replacement <- !is.na(replacement) & nzchar(replacement)
+  if (any(parsed$decision == "replace" & !has_replacement)) {
+    stop("Every replace decision must supply replacement_node_id.", call. = FALSE)
+  }
+  if (any(parsed$decision %in% c("keep", "drop") & has_replacement)) {
+    stop("keep and drop decisions must not supply replacement_node_id.", call. = FALSE)
+  }
+  allowed_node_id <- unique(as.character(c(mentions$node_id, allowed_node_id)))
+  allowed_node_id <- allowed_node_id[!is.na(allowed_node_id) & nzchar(allowed_node_id)]
+  unknown <- setdiff(unique(replacement[has_replacement]), allowed_node_id)
+  if (length(unknown)) {
+    stop(
+      "Model returned replacement_node_id values outside supplied candidates or graph context: ",
+      paste(unknown, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  parsed$node_id <- as.character(mentions$node_id)
+  object_id <- parsed$node_id
+  object_id[has_replacement] <- replacement[has_replacement]
+  object_id[parsed$decision == "drop"] <- NA_character_
   value_json <- vapply(seq_len(nrow(parsed)), function(i) {
     jsonlite::toJSON(as.list(parsed[i, , drop = FALSE]), auto_unbox = TRUE, null = "null")
   }, character(1))
@@ -2355,24 +2684,51 @@ ducksemantics_judgments_from_model <- function(parsed, mentions, model = "Rbebel
   )
 }
 
-ducksemantics_metric_keys <- function(x, by = "node") {
-  if (!nrow(x)) {
-    return(character())
+ducksemantics_judgment_node_ids <- function(mentions, graph_context = NULL) {
+  ids <- if (is.data.frame(mentions) && "node_id" %in% names(mentions)) {
+    as.character(mentions$node_id)
+  } else {
+    character()
   }
+  collect <- function(value) {
+    if (is.data.frame(value)) {
+      columns <- grep("(^|_)(node_id|from_id|to_id|object_id)$", names(value), value = TRUE)
+      return(unlist(lapply(value[columns], as.character), use.names = FALSE))
+    }
+    if (is.list(value)) {
+      direct <- character()
+      if (!is.null(names(value))) {
+        columns <- grep("(^|_)(node_id|from_id|to_id|object_id)$", names(value), value = TRUE)
+        direct <- unlist(lapply(value[columns], as.character), use.names = FALSE)
+      }
+      return(c(direct, unlist(lapply(value, collect), use.names = FALSE)))
+    }
+    character()
+  }
+  ids <- unique(c(ids, collect(graph_context)))
+  ids[!is.na(ids) & nzchar(ids)]
+}
+
+ducksemantics_metric_keys <- function(x, by = "node") {
+  if (!nrow(x)) return(character())
   case_id <- as.character(x$case_id)
   node_id <- as.character(x$node_id)
   if (identical(by, "node")) {
     return(unique(paste(case_id, node_id, sep = "\r")))
   }
-  has_offsets <- all(c("start_offset", "end_offset") %in% names(x)) &&
-    any(!is.na(x$start_offset) & !is.na(x$end_offset))
-  if (has_offsets) {
-    return(unique(paste(case_id, node_id, as.integer(x$start_offset), as.integer(x$end_offset), sep = "\r")))
+  if (identical(by, "offset")) {
+    return(unique(paste(
+      case_id,
+      node_id,
+      as.integer(x$start_offset),
+      as.integer(x$end_offset),
+      sep = "\r"
+    )))
   }
-  if ("span" %in% names(x) && any(!is.na(x$span))) {
+  if (identical(by, "span_text")) {
     return(unique(paste(case_id, node_id, as.character(x$span), sep = "\r")))
   }
-  stop("Span metrics require `start_offset`/`end_offset` or `span` columns.", call. = FALSE)
+  stop("Unknown internal metric key mode.", call. = FALSE)
 }
 
 ducksemantics_benchmark_case_metrics <- function(predictions, gold, case_ids) {
@@ -2397,9 +2753,14 @@ ducksemantics_benchmark_environment <- function() {
     }
     as.character(utils::packageVersion(pkg))
   }, character(1), USE.NAMES = TRUE)
+  system <- Sys.info()
   list(
     r_version = paste(R.version$major, R.version$minor, sep = "."),
     platform = R.version$platform,
+    os_type = .Platform$OS.type,
+    sysname = unname(system[["sysname"]]),
+    os_release = unname(system[["release"]]),
+    machine = unname(system[["machine"]]),
     packages = as.list(versions)
   )
 }

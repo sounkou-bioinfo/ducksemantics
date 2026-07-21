@@ -7,17 +7,13 @@ output: github_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
-embeddinggemma_weights <- Sys.getenv(
-  "EMBEDDING_GEMMA_WEIGHTS_FILE",
-  "/root/bebelm/embeddinggemma-300M-Q8_0.gguf"
-)
-colbert_weights <- Sys.getenv(
-  "COLBERT_WEIGHTS_FILE",
-  "/root/bebelm/LFM2.5-ColBERT-350M-Q4_K_M.gguf"
-)
-bebel_weights <- Sys.getenv(
-  "BEBELM_WEIGHTS_FILE",
-  "/root/bebelm/LFM2.5-8B-A1B-Q4_K_M.gguf"
+embeddinggemma_weights <- Sys.getenv("EMBEDDING_GEMMA_WEIGHTS_FILE", NA_character_)
+colbert_weights <- Sys.getenv("COLBERT_WEIGHTS_FILE", NA_character_)
+bebel_weights <- Sys.getenv("BEBELM_WEIGHTS_FILE", NA_character_)
+stopifnot(
+  file.exists(embeddinggemma_weights),
+  file.exists(colbert_weights),
+  file.exists(bebel_weights)
 )
 ```
 
@@ -34,6 +30,17 @@ late-interaction MaxSim reranking of stored candidate documents, and BebeLM
 records structured judgments with negation, uncertainty, family history, and
 subject context. HPO, MONDO, ORPHANET, and local knowledge graphs load through
 the same graph schema.
+
+## Install
+
+Install the release and its R dependencies from the project R-universe:
+
+```r
+install.packages(
+  "ducksemantics",
+  repos = c("https://sounkou-bioinfo.r-universe.dev", "https://cloud.r-project.org")
+)
+```
 
 ## Build a semantic graph
 
@@ -68,6 +75,15 @@ mentions <- ducksemantics_annotate(
 )
 mentions
 ```
+
+### Full HPO validation
+
+The 0.1.0 release was exercised against the complete HPO 2026-06-23 ontology.
+The run loaded 19,836 active nodes, 50,029 aliases, and 24,378 direct edges,
+then materialized 202,740 `is_a` closure rows. The model-scale run persisted one
+256-dimensional EmbeddingGemma vector for every active term and 182,884 native
+ColBERT token vectors across the same 19,836 terms before running dense and
+exact MaxSim queries.
 
 ## Dense retrieval with EmbeddingGemma
 

@@ -22,14 +22,17 @@ projection <- ducksemantics_projection_sql(
   to = "object",
   attrs = "attrs"
 )
-expect_equal(
-  projection,
+expect_true(grepl(
   paste0(
     'CREATE OR REPLACE TABLE "semantic_edges" AS SELECT ',
     '"subject" AS from_id, "predicate" AS predicate, "object" AS to_id, ',
     '"attrs" AS attrs, NULL AS trust FROM "source_edges"'
-  )
-)
+  ),
+  projection,
+  fixed = TRUE
+))
+expect_true(grepl('CREATE INDEX IF NOT EXISTS "semantic_edges_subj_idx"', projection, fixed = TRUE))
+expect_true(grepl('CREATE INDEX IF NOT EXISTS "semantic_edges_obj_idx"', projection, fixed = TRUE))
 
 closure <- ducksemantics_closure_sql(c("rdfs:subClassOf", "BFO:0000050"))
 expect_true(grepl("WITH RECURSIVE closure", closure, fixed = TRUE))
@@ -37,10 +40,13 @@ expect_true(grepl("'rdfs:subClassOf'", closure, fixed = TRUE))
 expect_true(grepl("'BFO:0000050'", closure, fixed = TRUE))
 
 empty_closure <- ducksemantics_closure_sql(character())
-expect_equal(
+expect_true(grepl(
+  'CREATE OR REPLACE TABLE "semantic_entailed_edges" (from_id TEXT, predicate TEXT, to_id TEXT)',
   empty_closure,
-  'CREATE OR REPLACE TABLE "semantic_entailed_edges" (from_id TEXT, predicate TEXT, to_id TEXT)'
-)
+  fixed = TRUE
+))
+expect_true(grepl('CREATE INDEX IF NOT EXISTS "semantic_entailed_edges_subj_idx"', empty_closure, fixed = TRUE))
+expect_true(grepl('CREATE INDEX IF NOT EXISTS "semantic_entailed_edges_obj_idx"', empty_closure, fixed = TRUE))
 
 expect_error(ducksemantics_tables("bad-prefix"))
 expect_error(ducksemantics_projection_sql("source_edges", "bad-column", "predicate", "object"))
@@ -48,6 +54,26 @@ expect_error(ducksemantics_projection_sql("source_edges", "bad-column", "predica
 expect_true(s7contract::implements(ducksemantics_prompt_runner(function(prompt) "[]"), DucksemanticsPromptRunner))
 expect_true(s7contract::implements(ducksemantics_json_judgment_parser(), DucksemanticsJudgmentParser))
 expect_true(s7contract::implements(ducksemantics_lexical_annotator(), DucksemanticsAnnotator))
+
+mixed_span_predictions <- data.frame(
+  case_id = c("a", "a"),
+  node_id = c("n1", "n2"),
+  span = c("alpha", "beta"),
+  start_offset = c(0L, NA_integer_),
+  end_offset = c(5L, NA_integer_)
+)
+mixed_span_gold <- data.frame(
+  case_id = c("a", "a"),
+  node_id = c("n1", "n2"),
+  span = c("alpha", "beta")
+)
+mixed_span_metrics <- ducksemantics_benchmark_metrics(
+  mixed_span_predictions,
+  mixed_span_gold,
+  by = "span"
+)
+expect_equal(mixed_span_metrics$tp, 2)
+expect_equal(mixed_span_metrics$f1, 1)
 
 embedding_provider <- ducksemantics_embedding_provider(function(text) {
   matrix(seq_along(text), nrow = length(text), ncol = 1L)
@@ -61,7 +87,9 @@ token_provider <- ducksemantics_token_embedding_provider(function(text) {
     list(
       embeddings = cbind(seq_along(tokens), rev(seq_along(tokens))),
       token_index = seq_along(tokens) - 1L,
-      tokens = tokens
+      tokens = tokens,
+      start_offset = seq_along(tokens) - 1L,
+      end_offset = seq_along(tokens)
     )
   })
 }, label = "tiny-token-provider")
@@ -74,6 +102,16 @@ token_provider_batch <- ducksemantics_token_embedding_batch_from_provider(
 )
 expect_true(S7::S7_inherits(token_provider_batch, DucksemanticsTokenEmbeddingBatch))
 expect_equal(nrow(S7::prop(token_provider_batch, "embeddings")), 3L)
+expect_equal(S7::prop(token_provider_batch, "start_offset"), c(0, 1, 0))
+expect_equal(S7::prop(token_provider_batch, "end_offset"), c(1, 2, 1))
+expect_error(
+  ducksemantics_token_embedding_batch(
+    matrix(c(1, 0, 0, 1), ncol = 2L, byrow = TRUE),
+    subject_id = c("a", "a"),
+    token_index = c(0, 0)
+  ),
+  "must be unique"
+)
 
 chunk_cache_dir <- tempfile()
 chunk_calls <- 0L
@@ -93,10 +131,35 @@ chunked_again <- ducksemantics_embed_cached(
   cache_dir = chunk_cache_dir,
   chunk_size = 2L
 )
+chunked_changed <- ducksemantics_embed_cached(
+  c("z", "yy", "xxx", "wwww", "vvvvv"),
+  provider = chunk_provider,
+  cache_dir = chunk_cache_dir,
+  chunk_size = 2L
+)
+sentinel <- file.path(chunk_cache_dir, "keep-me.txt")
+writeLines("unmanaged", sentinel)
+chunked_refreshed <- ducksemantics_embed_cached(
+  c("z", "yy", "xxx", "wwww", "vvvvv"),
+  provider = chunk_provider,
+  cache_dir = chunk_cache_dir,
+  chunk_size = 2L,
+  refresh = TRUE
+)
 expect_equal(as.vector(chunked_embeddings), c(1, 2, 3, 4, 5))
 expect_equal(chunked_embeddings, chunked_again)
-expect_equal(chunk_calls, 3L)
+expect_equal(as.vector(chunked_changed), c(1, 2, 3, 4, 5))
+expect_equal(chunked_changed, chunked_refreshed)
+expect_equal(chunk_calls, 9L)
 expect_true(file.exists(file.path(chunk_cache_dir, "manifest.rds")))
+expect_true(file.exists(sentinel))
+
+expect_error(
+  ducksemantics_cache_file("https://example.org/value", filename = "../outside"),
+  "without directory components"
+)
+expect_error(ducksemantics_embedding_query(c(0, 0), metric = "cosine"), "must be non-zero")
+expect_error(ducksemantics_embedding_index_spec(2L, metric = "unknown"), "must be one of")
 
 cache_path <- tempfile(fileext = ".rds")
 cache_calls <- 0L
@@ -154,9 +217,10 @@ writeLines(
     "[Term]",
     "id: HP:0000001",
     "name: All",
-    "def: \"Root term\" []",
+    "def: \"Root \\\"term\\\"\" []",
+    "alt_id: HP:OLD0001",
     "synonym: \"whole phenotype\" EXACT []",
-    "is_a: HP:0000118 ! Phenotypic abnormality",
+    "is_a: HP:0000118 {xref=\"PMID:1\"} ! Phenotypic abnormality",
     "relationship: part_of HP:0000707 ! Nervous system",
     "",
     "[Term]",
@@ -168,13 +232,21 @@ writeLines(
 )
 obo_graph <- ducksemantics_read_obo(obo_path, family = "HPO", source = "tiny.obo")
 expect_equal(obo_graph$nodes$node_id, "HP:0000001")
-expect_equal(sort(obo_graph$aliases$alias), c("All", "whole phenotype"))
+expect_equal(obo_graph$nodes$description, 'Root "term"')
+expect_equal(sort(obo_graph$aliases$alias), c("All", "HP:OLD0001", "whole phenotype"))
 expect_equal(sort(obo_graph$edges$predicate), c("is_a", "part_of"))
+expect_equal(obo_graph$edges$to_id[obo_graph$edges$predicate == "is_a"], "HP:0000118")
 
 if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", quietly = TRUE)) {
   conn <- ducksemantics_connect()
   on.exit(DBI::dbDisconnect(conn, shutdown = TRUE), add = TRUE)
   ducksemantics_init(conn)
+  DBI::dbExecute(conn, empty_closure)
+  closure_indexes <- DBI::dbGetQuery(
+    conn,
+    "SELECT index_name FROM duckdb_indexes() WHERE table_name = 'semantic_entailed_edges'"
+  )
+  expect_equal(nrow(closure_indexes), 2L)
   ducksemantics_write_obo(conn, obo_path, family = "HPO", source = "tiny.obo", replace = TRUE)
   tiny_hits <- ducksemantics_annotate(conn, "whole phenotype", document_id = "tiny-obo")
   expect_equal(tiny_hits$node_id, "HP:0000001")
@@ -189,9 +261,9 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
     ),
     replace = TRUE,
     aliases = data.frame(
-      node_id = c("HP:0004322", "HP:0004322", "HP:0001250"),
-      alias = c("short stature", "short height", "seizures"),
-      alias_kind = c("label", "exact_synonym", "exact_synonym"),
+      node_id = c("HP:0004322", "HP:0004322", "HP:0004322", "HP:0001250"),
+      alias = c("short stature", "short stature", "short height", "seizures"),
+      alias_kind = c("label", "exact_synonym", "exact_synonym", "exact_synonym"),
       stringsAsFactors = FALSE
     ),
     edges = data.frame(
@@ -208,7 +280,23 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
     document_id = "case-001"
   )
   expect_equal(sort(hits$node_id), c("HP:0001250", "HP:0004322"))
+  expect_equal(nrow(hits), 2L)
   expect_true(all(hits$method == "lexical_alias"))
+
+  graph_counts_before <- DBI::dbGetQuery(
+    conn,
+    "SELECT (SELECT COUNT(*) FROM semantic_aliases) AS aliases, (SELECT COUNT(*) FROM semantic_edges) AS edges"
+  )
+  ducksemantics_write_graph(
+    conn,
+    aliases = data.frame(node_id = "HP:0004322", alias = "short stature", alias_kind = "label"),
+    edges = data.frame(from_id = "HP:0004322", predicate = "is_a", to_id = "HP:0000001")
+  )
+  graph_counts_after <- DBI::dbGetQuery(
+    conn,
+    "SELECT (SELECT COUNT(*) FROM semantic_aliases) AS aliases, (SELECT COUNT(*) FROM semantic_edges) AS edges"
+  )
+  expect_equal(graph_counts_after, graph_counts_before)
 
   vector_batch <- ducksemantics_embedding_batch(
     embeddings = matrix(
@@ -266,6 +354,13 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
     ducksemantics_late_interaction_search(conn)
   expect_true(inherits(late_hits, "ducksemantics_late_interaction_result"))
   expect_equal(late_hits$subject_id[[1L]], "HP:0004322")
+  expect_error(
+    ducksemantics_late_interaction_search(
+      ducksemantics_token_embedding_query(matrix(c(0, 0), ncol = 2L)),
+      conn
+    ),
+    "non-zero norm"
+  )
   expect_equal(nrow(late_hits), 2L)
   expect_true(late_hits$score[[1L]] > late_hits$score[[2L]])
 
@@ -278,6 +373,23 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
   ) |>
     ducksemantics_late_interaction_search(conn)
   expect_equal(candidate_hit$subject_id, "HP:0001250")
+
+  collision_batch <- ducksemantics_token_embedding_batch(
+    embeddings = matrix(c(1, 0, 0, 1), ncol = 2L, byrow = TRUE),
+    subject_id = c("collision-a", "collision-b"),
+    subject_kind = "node",
+    provider = "collision-provider",
+    block_id = c("same-block", "same-block")
+  )
+  ducksemantics_write_token_embeddings(collision_batch, conn, replace = TRUE)
+  collision_hits <- ducksemantics_token_embedding_query(
+    matrix(c(1, 0), ncol = 2L),
+    provider = "collision-provider",
+    top_k = 5L
+  ) |>
+    ducksemantics_late_interaction_search(conn)
+  expect_equal(nrow(collision_hits), 2L)
+  expect_equal(sort(collision_hits$subject_id), c("collision-a", "collision-b"))
 
   vector_hits <- ducksemantics_embedding_query(
     c(1, 0, 0),
@@ -350,6 +462,50 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
   expect_equal(nrow(judgments), nrow(hits))
   expect_true(all(judgments$decision == "keep"))
 
+  missing_runner <- ducksemantics_prompt_runner(function(prompt) {
+    '[{"mention_id":"case-001:000017","decision":"keep"}]'
+  })
+  expect_error(
+    ducksemantics_judge("text", hits, runner = missing_runner),
+    "exactly one result per candidate"
+  )
+  replacement_runner <- ducksemantics_prompt_runner(function(prompt) {
+    jsonlite::toJSON(
+      data.frame(
+        mention_id = hits$mention_id,
+        decision = c("replace", "keep"),
+        replacement_node_id = c("HP:NOT_SUPPLIED", NA_character_),
+        stringsAsFactors = FALSE
+      ),
+      dataframe = "rows",
+      auto_unbox = TRUE,
+      na = "null"
+    )
+  })
+  expect_error(
+    ducksemantics_judge("text", hits, runner = replacement_runner),
+    "outside supplied candidates"
+  )
+  empty_judgments <- ducksemantics_judge(
+    "text",
+    hits[FALSE, , drop = FALSE],
+    runner = ducksemantics_prompt_runner(function(prompt) "[]")
+  )
+  expect_equal(nrow(empty_judgments), 0L)
+
+  expect_error(
+    ducksemantics_benchmark_cases(
+      cases = data.frame(case_id = character(), text = character()),
+      gold = data.frame(case_id = character(), node_id = character())
+    )
+  )
+  expect_error(
+    ducksemantics_benchmark_cases(
+      cases = data.frame(case_id = c("duplicate", "duplicate"), text = c("a", "b")),
+      gold = data.frame(case_id = character(), node_id = character())
+    ),
+    "uniquely identify"
+  )
   benchmark <- ducksemantics_benchmark_cases(
     cases = data.frame(
       case_id = "case-001",
@@ -375,7 +531,20 @@ if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("jsonlite", q
   expect_equal(result$case_metrics$case_id, "case-001")
   expect_equal(result$source, "tinytest")
   expect_true(is.list(result$environment$packages))
+  expect_true(result$environment$os_type %in% c("unix", "windows"))
+  expect_true(nzchar(result$environment$sysname))
 
   stats <- ducksemantics_index_stats(conn)
   expect_true(any(stats$tables$table == "semantic_alias_index"))
+
+  ducksemantics_write_graph(
+    conn,
+    nodes = data.frame(node_id = "HP:AMBIGUOUS", family = "HPO", label = "Other seizures"),
+    aliases = data.frame(node_id = "HP:AMBIGUOUS", alias = "seizures", alias_kind = "label"),
+    index = TRUE
+  )
+  ambiguous_hits <- ducksemantics_annotate(conn, "seizures", document_id = "ambiguous")
+  expect_equal(nrow(ambiguous_hits), 2L)
+  expect_equal(anyDuplicated(ambiguous_hits$mention_id), 0L)
+  expect_true(all(grepl("HP:", ambiguous_hits$mention_id, fixed = TRUE)))
 }

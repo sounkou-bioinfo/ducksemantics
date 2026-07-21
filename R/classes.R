@@ -16,6 +16,10 @@ ducksemantics_optional_text_property <- S7::new_property(
   }
 )
 
+ducksemantics_nullable_text_property <- S7::new_property(
+  S7::new_union(NULL, S7::class_character)
+)
+
 ducksemantics_flag_property <- S7::new_property(
   S7::class_logical,
   validator = function(value) {
@@ -28,7 +32,7 @@ ducksemantics_flag_property <- S7::new_property(
 ducksemantics_positive_integer_property <- S7::new_property(
   S7::class_numeric,
   validator = function(value) {
-    if (length(value) != 1L || is.na(value) || value < 1 || value != as.integer(value)) {
+    if (length(value) != 1L || is.na(value) || !is.finite(value) || value < 1 || value != floor(value)) {
       "must be a positive integer scalar"
     }
   }
@@ -185,7 +189,7 @@ DucksemanticsEmbeddingMatrix <- S7::new_class(
   validator = function(self) {
     embeddings <- S7::prop(self, "embeddings")
     rows <- S7::prop(self, "rows")
-    if (length(rows) != 1L || is.na(rows) || rows < 0 || rows != as.integer(rows)) {
+    if (length(rows) != 1L || is.na(rows) || !is.finite(rows) || rows < 0 || rows != floor(rows)) {
       return("@rows must be a non-negative integer scalar")
     }
     if (nrow(embeddings) != as.integer(rows)) {
@@ -214,8 +218,8 @@ DucksemanticsEmbeddingBatch <- S7::new_class(
     subject_id = S7::class_character,
     subject_kind = ducksemantics_text_property,
     provider = ducksemantics_text_property,
-    text = ducksemantics_optional_text_property,
-    attrs = ducksemantics_optional_text_property
+    text = ducksemantics_nullable_text_property,
+    attrs = ducksemantics_nullable_text_property
   ),
   validator = function(self) {
     embeddings <- S7::prop(self, "embeddings")
@@ -256,6 +260,14 @@ ducksemantics_embedding_batch <- function(embeddings,
   )
 }
 
+ducksemantics_default_block_id <- function(provider, subject_kind, subject_id) {
+  paste0(
+    nchar(provider, type = "bytes"), ":", provider, "|",
+    nchar(subject_kind, type = "bytes"), ":", subject_kind, "|",
+    nchar(subject_id, type = "bytes"), ":", subject_id
+  )
+}
+
 #' Token embedding batch for late-interaction storage
 #'
 #' @param embeddings Numeric matrix with one row per token.
@@ -284,10 +296,10 @@ DucksemanticsTokenEmbeddingBatch <- S7::new_class(
     provider = ducksemantics_text_property,
     token_index = S7::class_numeric,
     block_id = S7::class_character,
-    token = ducksemantics_optional_text_property,
+    token = ducksemantics_nullable_text_property,
     start_offset = S7::new_union(NULL, S7::class_numeric),
     end_offset = S7::new_union(NULL, S7::class_numeric),
-    attrs = ducksemantics_optional_text_property
+    attrs = ducksemantics_nullable_text_property
   ),
   validator = function(self) {
     embeddings <- S7::prop(self, "embeddings")
@@ -301,14 +313,24 @@ DucksemanticsTokenEmbeddingBatch <- S7::new_class(
     if (length(block_id) != n || anyNA(block_id) || any(!nzchar(block_id))) {
       return("@block_id must contain one non-empty value per token row")
     }
-    if (length(token_index) != n || anyNA(token_index) || any(token_index < 0) ||
-      any(token_index != as.integer(token_index))) {
+    if (length(token_index) != n || anyNA(token_index) || any(!is.finite(token_index)) ||
+          any(token_index < 0) || any(token_index != floor(token_index))) {
       return("@token_index must contain one non-negative integer value per token row")
+    }
+    if (anyDuplicated(data.frame(
+      block_id = block_id,
+      subject_id = subject_id,
+      token_index = token_index
+    ))) {
+      return("@token_index must be unique within each @block_id and @subject_id")
     }
     for (field in c("token", "attrs")) {
       value <- S7::prop(self, field)
       if (!is.null(value) && !(length(value) %in% c(1L, n))) {
         return(paste0("@", field, " must be NULL, length 1, or one value per token row"))
+      }
+      if (!is.null(value) && any(!is.na(value) & !nzchar(value))) {
+        return(paste0("@", field, " must contain non-empty strings or NA"))
       }
     }
     for (field in c("start_offset", "end_offset")) {
@@ -316,8 +338,20 @@ DucksemanticsTokenEmbeddingBatch <- S7::new_class(
       if (!is.null(value) && !(length(value) %in% c(1L, n))) {
         return(paste0("@", field, " must be NULL, length 1, or one value per token row"))
       }
-      if (!is.null(value) && any(!is.na(value) & value != as.integer(value))) {
-        return(paste0("@", field, " must contain integer offsets or NA"))
+      invalid_offset <- !is.null(value) && any(
+        !is.na(value) & (!is.finite(value) | value < 0 | value != floor(value))
+      )
+      if (invalid_offset) {
+        return(paste0("@", field, " must contain non-negative integer offsets or NA"))
+      }
+    }
+    start_offset <- S7::prop(self, "start_offset")
+    end_offset <- S7::prop(self, "end_offset")
+    if (!is.null(start_offset) && !is.null(end_offset)) {
+      starts <- rep(start_offset, length.out = n)
+      ends <- rep(end_offset, length.out = n)
+      if (any(xor(is.na(starts), is.na(ends))) || any(!is.na(starts) & starts > ends)) {
+        return("@start_offset and @end_offset must be paired and start must not exceed end")
       }
     }
     NULL
@@ -341,30 +375,24 @@ ducksemantics_token_embedding_batch <- function(embeddings,
   embeddings <- as.matrix(embeddings)
   storage.mode(embeddings) <- "double"
   subject_id <- as.character(subject_id)
-  if (is.null(token_index)) {
-    counts <- integer()
-    names(counts) <- character()
-    token_index <- integer(length(subject_id))
-    for (i in seq_along(subject_id)) {
-      key <- subject_id[[i]]
-      current <- if (key %in% names(counts)) counts[[key]] else 0L
-      token_index[[i]] <- current
-      counts[[key]] <- current + 1L
-    }
-  }
   if (is.null(block_id)) {
-    block_id <- paste(provider, subject_kind, subject_id, sep = "::")
+    block_id <- ducksemantics_default_block_id(provider, subject_kind, subject_id)
+  }
+  block_id <- as.character(block_id)
+  if (is.null(token_index)) {
+    groups <- interaction(subject_id, block_id, drop = TRUE, lex.order = TRUE)
+    token_index <- stats::ave(seq_along(subject_id), groups, FUN = seq_along) - 1L
   }
   DucksemanticsTokenEmbeddingBatch(
     embeddings = embeddings,
     subject_id = subject_id,
     subject_kind = subject_kind,
     provider = provider,
-    token_index = as.integer(token_index),
-    block_id = as.character(block_id),
+    token_index = as.numeric(token_index),
+    block_id = block_id,
     token = if (is.null(token)) NULL else as.character(token),
-    start_offset = if (is.null(start_offset)) NULL else as.integer(start_offset),
-    end_offset = if (is.null(end_offset)) NULL else as.integer(end_offset),
+    start_offset = if (is.null(start_offset)) NULL else as.numeric(start_offset),
+    end_offset = if (is.null(end_offset)) NULL else as.numeric(end_offset),
     attrs = if (is.null(attrs)) NULL else as.character(attrs)
   )
 }
@@ -383,13 +411,13 @@ ducksemantics_token_embedding_batch <- function(embeddings,
 #' @return A `DucksemanticsTokenEmbeddingBatch` object.
 #' @export
 ducksemantics_token_embedding_batch_from_provider <- function(text,
-                                                             provider,
-                                                             subject_id = text,
-                                                             subject_kind = "node",
-                                                             provider_label = NULL,
-                                                             block_id = NULL,
-                                                             attrs = NULL,
-                                                             ...) {
+                                                              provider,
+                                                              subject_id = text,
+                                                              subject_kind = "node",
+                                                              provider_label = NULL,
+                                                              block_id = NULL,
+                                                              attrs = NULL,
+                                                              ...) {
   if (!is.character(text) || anyNA(text)) {
     stop("`text` must be a character vector without NA.", call. = FALSE)
   }
@@ -402,12 +430,9 @@ ducksemantics_token_embedding_batch_from_provider <- function(text,
   }
   S7::prop(DucksemanticsScalarText(value = subject_kind), "value")
   if (is.null(provider_label)) {
-    provider_label <- if (S7::S7_inherits(provider, ducksemantics_colbert_provider_class) ||
-      S7::S7_inherits(provider, ducksemantics_function_token_embedding_provider_class)) {
-      provider@label
-    } else {
-      class(provider)[[1L]]
-    }
+    known_provider <- S7::S7_inherits(provider, ducksemantics_colbert_provider_class) ||
+      S7::S7_inherits(provider, ducksemantics_function_token_embedding_provider_class)
+    provider_label <- if (known_provider) provider@label else class(provider)[[1L]]
   }
   S7::prop(DucksemanticsScalarText(value = provider_label), "value")
   if (!is.null(block_id) && (length(block_id) != length(text) || anyNA(block_id) || any(!nzchar(block_id)))) {
@@ -422,11 +447,13 @@ ducksemantics_token_embedding_batch_from_provider <- function(text,
     stop("Token embedding providers must return one object per input text.", call. = FALSE)
   }
   embeddings <- vector("list", length(token_objects))
-  subject_ids <- character()
-  token_index <- integer()
-  tokens <- character()
-  block_ids <- character()
-  attrs_out <- character()
+  subject_ids <- vector("list", length(token_objects))
+  token_indices <- vector("list", length(token_objects))
+  tokens <- vector("list", length(token_objects))
+  start_offsets <- vector("list", length(token_objects))
+  end_offsets <- vector("list", length(token_objects))
+  block_ids <- vector("list", length(token_objects))
+  attrs_out <- vector("list", length(token_objects))
   attrs_values <- if (is.null(attrs)) rep(NA_character_, length(text)) else rep(as.character(attrs), length.out = length(text))
   for (i in seq_along(token_objects)) {
     one <- token_objects[[i]]
@@ -436,21 +463,56 @@ ducksemantics_token_embedding_batch_from_provider <- function(text,
     one_embeddings <- S7::prop(DucksemanticsEmbeddingMatrix(embeddings = one$embeddings, rows = nrow(one$embeddings)), "embeddings")
     n_tokens <- nrow(one_embeddings)
     embeddings[[i]] <- one_embeddings
-    subject_ids <- c(subject_ids, rep(subject_id[[i]], n_tokens))
-    token_index <- c(token_index, if (is.null(one$token_index)) seq_len(n_tokens) - 1L else as.integer(one$token_index))
-    tokens <- c(tokens, if (is.null(one$tokens)) rep(NA_character_, n_tokens) else rep(as.character(one$tokens), length.out = n_tokens))
-    block_value <- if (is.null(block_id)) paste(provider_label, subject_kind, subject_id[[i]], sep = "::") else block_id[[i]]
-    block_ids <- c(block_ids, rep(block_value, n_tokens))
-    attrs_out <- c(attrs_out, rep(attrs_values[[i]], n_tokens))
+    subject_ids[[i]] <- rep(subject_id[[i]], n_tokens)
+    one_token_index <- if (is.null(one$token_index)) seq_len(n_tokens) - 1L else one$token_index
+    if (!is.numeric(one_token_index) || length(one_token_index) != n_tokens ||
+          anyNA(one_token_index) || any(!is.finite(one_token_index)) || any(one_token_index < 0) ||
+          any(one_token_index != floor(one_token_index))) {
+      stop("Token embedding object ", i, " has invalid `token_index`.", call. = FALSE)
+    }
+    one_tokens <- if (is.null(one$tokens)) rep(NA_character_, n_tokens) else as.character(one$tokens)
+    if (length(one_tokens) != n_tokens) {
+      stop("Token embedding object ", i, " must have one token value per embedding row.", call. = FALSE)
+    }
+    one_start <- if (is.null(one$start_offset)) rep(NA_integer_, n_tokens) else one$start_offset
+    one_end <- if (is.null(one$end_offset)) rep(NA_integer_, n_tokens) else one$end_offset
+    if (!is.numeric(one_start) || !is.numeric(one_end) ||
+          length(one_start) != n_tokens || length(one_end) != n_tokens ||
+          any(!is.na(one_start) & (!is.finite(one_start) | one_start < 0 | one_start != floor(one_start))) ||
+          any(!is.na(one_end) & (!is.finite(one_end) | one_end < 0 | one_end != floor(one_end))) ||
+          any(xor(is.na(one_start), is.na(one_end))) ||
+          any(!is.na(one_start) & one_start > one_end)) {
+      stop("Token embedding object ", i, " has invalid source offsets.", call. = FALSE)
+    }
+    token_indices[[i]] <- as.integer(one_token_index)
+    tokens[[i]] <- one_tokens
+    start_offsets[[i]] <- as.integer(one_start)
+    end_offsets[[i]] <- as.integer(one_end)
+    block_value <- if (is.null(block_id)) {
+      ducksemantics_default_block_id(provider_label, subject_kind, subject_id[[i]])
+    } else {
+      block_id[[i]]
+    }
+    block_ids[[i]] <- rep(block_value, n_tokens)
+    attrs_out[[i]] <- rep(attrs_values[[i]], n_tokens)
   }
+  subject_ids <- unlist(subject_ids, use.names = FALSE)
+  token_indices <- unlist(token_indices, use.names = FALSE)
+  tokens <- unlist(tokens, use.names = FALSE)
+  start_offsets <- unlist(start_offsets, use.names = FALSE)
+  end_offsets <- unlist(end_offsets, use.names = FALSE)
+  block_ids <- unlist(block_ids, use.names = FALSE)
+  attrs_out <- unlist(attrs_out, use.names = FALSE)
   ducksemantics_token_embedding_batch(
     embeddings = do.call(rbind, embeddings),
     subject_id = subject_ids,
     subject_kind = subject_kind,
     provider = provider_label,
-    token_index = token_index,
+    token_index = token_indices,
     block_id = block_ids,
     token = if (all(is.na(tokens))) NULL else tokens,
+    start_offset = if (all(is.na(start_offsets))) NULL else start_offsets,
+    end_offset = if (all(is.na(end_offsets))) NULL else end_offsets,
     attrs = if (all(is.na(attrs_out))) NULL else attrs_out
   )
 }
@@ -515,7 +577,7 @@ ducksemantics_token_embedding_query <- function(embeddings,
     embeddings = embeddings,
     provider = if (is.null(provider)) NULL else as.character(provider),
     subject_kind = if (is.null(subject_kind)) NULL else as.character(subject_kind),
-    top_k = as.integer(top_k),
+    top_k = top_k,
     table = if (is.null(table)) NULL else as.character(table),
     candidate_subject_id = if (is.null(candidate_subject_id)) NULL else as.character(candidate_subject_id)
   )
@@ -549,6 +611,10 @@ DucksemanticsEmbeddingQuery <- S7::new_class(
     metric <- S7::prop(self, "metric")
     if (!metric %in% c("cosine", "cosine_distance", "l2", "inner_product")) {
       return('@metric must be one of "cosine", "cosine_distance", "l2", or "inner_product"')
+    }
+    if (metric %in% c("cosine", "cosine_distance") &&
+          sum(S7::prop(self, "embedding") ^ 2) == 0) {
+      return("@embedding must be non-zero for a cosine metric")
     }
     for (field in c("provider", "subject_kind", "table")) {
       value <- S7::prop(self, field)
@@ -627,6 +693,9 @@ DucksemanticsEmbeddingIndexSpec <- S7::new_class(
         return(paste0("@", field, " must be NULL or a non-empty character scalar"))
       }
     }
+    if (!S7::prop(self, "metric") %in% c("cosine", "l2sq", "ip")) {
+      return('@metric must be one of "cosine", "l2sq", or "ip"')
+    }
     table <- S7::prop(self, "table")
     if (!is.null(table)) {
       invalid <- tryCatch({
@@ -699,7 +768,7 @@ DucksemanticsEmbeddingClusterSpec <- S7::new_class(
     }
     dimensions <- S7::prop(self, "dimensions")
     if (!is.null(dimensions) && (length(dimensions) != 1L || is.na(dimensions) ||
-      dimensions < 1 || dimensions != as.integer(dimensions))) {
+                                   !is.finite(dimensions) || dimensions < 1 || dimensions != floor(dimensions))) {
       return("@dimensions must be NULL or a positive integer scalar")
     }
     table <- S7::prop(self, "table")
@@ -734,7 +803,7 @@ ducksemantics_embedding_cluster_spec <- function(k,
     k = k,
     provider = provider,
     subject_kind = subject_kind,
-    dimensions = if (is.null(dimensions)) NULL else as.integer(dimensions),
+    dimensions = dimensions,
     table = table,
     run_id = run_id,
     seed = seed,

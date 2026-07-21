@@ -60,7 +60,9 @@ ducksemantics_ground <- S7::new_generic(
   "ducksemantics_ground",
   "annotator",
   function(annotator, conn, text, document_id = NULL, prefix = "semantic",
-           longest_match = TRUE, record = FALSE, ...) S7::S7_dispatch()
+           longest_match = TRUE, record = FALSE, ...) {
+    S7::S7_dispatch()
+  }
 )
 
 #' Structural interface for prompt runners
@@ -220,7 +222,7 @@ ducksemantics_embeddinggemma_provider_class <- S7::new_class(
       return("@task must be an EmbeddingGemma task.")
     }
     if (!is.null(S7::prop(self, "title")) &&
-      !identical(S7::prop(self, "task"), "retrieval_document")) {
+          !identical(S7::prop(self, "task"), "retrieval_document")) {
       return("@title is valid only for @task = \"retrieval_document\".")
     }
     if (!S7::prop(self, "dimensions") %in% c(768, 512, 256, 128)) {
@@ -536,7 +538,11 @@ S7::method(ducksemantics_token_embed, ducksemantics_colbert_provider_class) <- f
 #' @param cache_dir Directory for chunk RDS files.
 #' @param chunk_size Number of texts per persisted chunk.
 #' @param refresh Recompute all chunks?
-#' @param ... Extra arguments passed to [ducksemantics_embed()].
+#' @param cache_key Optional stable identifier for provider weights or other
+#'   state that is not represented by the provider object. Changing it
+#'   invalidates existing chunks.
+#' @param ... Extra arguments passed to [ducksemantics_embed()]. These arguments
+#'   are included in the cache identity.
 #' @return Numeric embedding matrix with one row per input text.
 #' @export
 ducksemantics_embed_cached <- function(text,
@@ -544,6 +550,7 @@ ducksemantics_embed_cached <- function(text,
                                        cache_dir,
                                        chunk_size = 4096L,
                                        refresh = FALSE,
+                                       cache_key = NULL,
                                        ...) {
   if (!is.character(text) || anyNA(text)) {
     stop("`text` must be a character vector without NA.", call. = FALSE)
@@ -560,17 +567,40 @@ ducksemantics_embed_cached <- function(text,
   chunk_size <- as.integer(spec@chunk_size)
   refresh <- spec@refresh
 
-  if (isTRUE(refresh) && dir.exists(cache_dir)) {
-    unlink(cache_dir, recursive = TRUE, force = TRUE)
+  if (dir.exists(cache_dir) && isTRUE(refresh)) {
+    managed <- c(
+      file.path(cache_dir, "manifest.rds"),
+      list.files(cache_dir, pattern = "^chunk-[0-9]+[.]rds$", full.names = TRUE)
+    )
+    unlink(managed, force = TRUE)
+  }
+  if (file.exists(cache_dir) && !dir.exists(cache_dir)) {
+    stop("`cache_dir` exists and is not a directory.", call. = FALSE)
   }
   if (!dir.exists(cache_dir)) {
     dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
   }
 
+  if (!is.null(cache_key)) {
+    S7::prop(DucksemanticsScalarText(value = cache_key), "value")
+  }
+  dots <- list(...)
+  contract <- list(
+    version = 2L,
+    n = length(text),
+    chunk_size = chunk_size,
+    text = ducksemantics_cache_fingerprint(text),
+    provider = ducksemantics_provider_cache_identity(provider),
+    arguments = ducksemantics_cache_fingerprint(dots),
+    cache_key = cache_key
+  )
   manifest_path <- file.path(cache_dir, "manifest.rds")
-  manifest <- if (file.exists(manifest_path)) readRDS(manifest_path) else NULL
-  if (!is.null(manifest) &&
-    (!identical(manifest$n, length(text)) || !identical(manifest$chunk_size, chunk_size))) {
+  manifest <- if (file.exists(manifest_path)) {
+    tryCatch(readRDS(manifest_path), error = function(error) NULL)
+  } else {
+    NULL
+  }
+  if (!is.list(manifest) || !identical(manifest$contract, contract)) {
     unlink(list.files(cache_dir, pattern = "^chunk-[0-9]+[.]rds$", full.names = TRUE), force = TRUE)
     manifest <- NULL
   }
@@ -581,12 +611,20 @@ ducksemantics_embed_cached <- function(text,
   for (i in seq_along(starts)) {
     idx <- starts[[i]]:min(length(text), starts[[i]] + chunk_size - 1L)
     path <- paths[[i]]
-    chunk <- if (file.exists(path)) {
-      readRDS(path)
+    chunk_key <- ducksemantics_cache_fingerprint(list(contract, i = i, text = text[idx]))
+    cached <- if (file.exists(path)) {
+      tryCatch(readRDS(path), error = function(error) NULL)
     } else {
-      out <- ducksemantics_embed(provider, text[idx], ...)
-      saveRDS(out, path)
-      out
+      NULL
+    }
+    if (is.list(cached) && identical(cached$key, chunk_key) && !is.null(cached$embeddings)) {
+      chunk <- cached$embeddings
+    } else {
+      chunk <- do.call(
+        ducksemantics_embed,
+        c(list(provider = provider, text = text[idx]), dots)
+      )
+      ducksemantics_atomic_save_rds(list(key = chunk_key, embeddings = chunk), path)
     }
     chunks[[i]] <- S7::prop(
       DucksemanticsEmbeddingMatrix(embeddings = chunk, rows = length(idx)),
@@ -595,16 +633,52 @@ ducksemantics_embed_cached <- function(text,
   }
 
   out <- do.call(rbind, chunks)
-  saveRDS(
-    list(
-      n = length(text),
-      chunk_size = chunk_size,
-      chunks = basename(paths),
-      dimensions = dim(out)
-    ),
+  ducksemantics_atomic_save_rds(
+    list(contract = contract, chunks = basename(paths), dimensions = dim(out)),
     manifest_path
   )
   out
+}
+
+ducksemantics_cache_fingerprint <- function(value) {
+  path <- tempfile("ducksemantics-cache-fingerprint-", fileext = ".rds")
+  on.exit(unlink(path, force = TRUE), add = TRUE)
+  saveRDS(value, path, version = 3L)
+  unname(tools::md5sum(path))
+}
+
+ducksemantics_provider_cache_identity <- function(provider) {
+  if (S7::S7_inherits(provider, ducksemantics_embeddinggemma_provider_class)) {
+    model <- tryCatch(
+      Rbebelm::embeddinggemma_model_info(provider@model),
+      error = function(error) list()
+    )
+    if (!is.null(model$path) && file.exists(model$path)) {
+      info <- file.info(model$path)
+      model$file_size <- unname(info$size)
+      model$modified <- format(info$mtime, tz = "UTC", usetz = TRUE)
+    }
+    identity <- list(
+      class = class(provider),
+      label = provider@label,
+      task = provider@task,
+      title = provider@title,
+      dimensions = provider@dimensions,
+      normalize = provider@normalize,
+      truncate = provider@truncate,
+      model = model
+    )
+  } else if (S7::S7_inherits(provider, ducksemantics_function_embedding_provider_class)) {
+    identity <- list(
+      class = class(provider),
+      label = provider@label,
+      formals = formals(provider@fun),
+      body = body(provider@fun)
+    )
+  } else {
+    identity <- provider
+  }
+  ducksemantics_cache_fingerprint(identity)
 }
 
 S7::method(ducksemantics_parse, ducksemantics_json_judgment_parser_class) <- function(parser, response, ...) {

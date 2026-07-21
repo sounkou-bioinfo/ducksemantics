@@ -1,7 +1,7 @@
 Package: ducksemantics
 Type: Package
 Title: DuckDB-Native Semantic Graph Grounding
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person(given = "Sounkou Mahamane", family = "Toure",
            email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
@@ -18,18 +18,20 @@ License: MIT + file LICENSE
 URL: https://github.com/sounkou-bioinfo/ducksemantics, https://sounkou-bioinfo.github.io/ducksemantics/
 BugReports: https://github.com/sounkou-bioinfo/ducksemantics/issues
 Encoding: UTF-8
+Depends:
+    R (>= 4.3.0)
 Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
 Imports:
     DBI,
     S7,
-    s7contract,
+    s7contract (>= 0.1.0),
     utils
 Suggests:
     duckdb,
     jsonlite,
-    Rbebelm,
+    Rbebelm (>= 0.3.6-0.1.0),
     tinytest
 Remotes:
     sounkou-bioinfo/Rbebelm,
     sounkou-bioinfo/s7contract
-Config/roxygen2/version: 8.0.0

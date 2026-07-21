@@ -10,6 +10,7 @@ ducksemantics_embed_cached(
   cache_dir,
   chunk_size = 4096L,
   refresh = FALSE,
+  cache_key = NULL,
   ...
 )
 }
@@ -24,7 +25,12 @@ ducksemantics_embed_cached(
 
 \item{refresh}{Recompute all chunks?}
 
-\item{...}{Extra arguments passed to \code{\link[=ducksemantics_embed]{ducksemantics_embed()}}.}
+\item{cache_key}{Optional stable identifier for provider weights or other
+state that is not represented by the provider object. Changing it
+invalidates existing chunks.}
+
+\item{...}{Extra arguments passed to \code{\link[=ducksemantics_embed]{ducksemantics_embed()}}. These arguments
+are included in the cache identity.}
 }
 \value{
 Numeric embedding matrix with one row per input text.
