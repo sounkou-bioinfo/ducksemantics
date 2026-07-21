@@ -10,7 +10,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/sounkou-bioinfo/ducksemantics/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/sounkou-bioinfo/ducksemantics/blob/v0.1.0/DESCRIPTION)
 
 Toure S (2026). *ducksemantics: DuckDB-Native Semantic Graph Grounding*.
 R package version 0.1.0,
